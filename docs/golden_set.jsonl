@@ -1,0 +1,6 @@
+{"query": "Ads mentioning zero-fee mobile banking with instant notifications", "expected_brands": ["Current", "Chime", "Monzo"], "notes": "Financial apps emphasising no monthly fees"}
+{"query": "Automotive spots highlighting electric SUVs with 300 mile range", "expected_brands": ["Ford", "Toyota", "Hyundai"], "notes": "EV positioning"}
+{"query": "Insurance commercials promising rate lock and accident forgiveness", "expected_brands": ["Progressive", "Liberty Mutual", "State Farm"], "notes": "Rate guarantee claims"}
+{"query": "Home internet campaigns pushing symmetrical gigabit fiber", "expected_brands": ["Google Fiber", "Verizon Fios", "AT&T Fiber"], "notes": "Gigabit and upload speed emphasis"}
+{"query": "Ads referencing buy now pay later for fashion retailers", "expected_brands": ["Afterpay", "Klarna", "Affirm"], "notes": "BNPL callouts"}
+
