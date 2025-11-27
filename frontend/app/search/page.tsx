@@ -3,6 +3,7 @@ import AdGrid from '@/components/AdGrid';
 import SearchBar from '@/components/SearchBar';
 import { SearchResult } from '@/lib/types';
 import { constructMetadata } from '@/lib/seo';
+import Link from 'next/link';
 
 // Force dynamic rendering as search results depend on query params
 export const dynamic = 'force-dynamic';
@@ -40,25 +41,25 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const results = query ? await getSearchResults(query) : [];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-        <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+    <div className="min-h-screen bg-background flex flex-col">
+        <header className="bg-black/20 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-6">
-                <a href="/" className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 shrink-0">
+                <Link href="/" className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 shrink-0 hover:opacity-80 transition-opacity">
                     TellyAds
-                </a>
+                </Link>
                 <div className="flex-grow max-w-xl">
                    <SearchBar />
                 </div>
             </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-8">
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-slate-800">
+        <main className="flex-grow w-full max-w-7xl mx-auto px-4 py-8">
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-white tracking-tight">
                     {query ? `Results for "${query}"` : 'Search Ads'}
                 </h1>
-                <p className="text-slate-500">
-                    {results.length} commercials found
+                <p className="text-muted-foreground mt-2">
+                    Found {results.length} commercials matching your query
                 </p>
             </div>
 

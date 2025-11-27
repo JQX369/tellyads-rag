@@ -7,6 +7,8 @@ export interface SearchResult {
   score?: number;
   meta?: any;
   item_type: string;
+  image_url?: string;
+  description?: string;
 }
 
 export interface AdDetail {
@@ -22,4 +24,3 @@ export interface AdDetail {
     video_url?: string;
     image_url?: string;
 }
-

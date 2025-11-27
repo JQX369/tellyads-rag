@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 
 export default function SearchBar() {
   const [query, setQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -16,24 +17,30 @@ export default function SearchBar() {
   };
 
   return (
-    <form onSubmit={handleSearch} className="w-full max-w-2xl mx-auto relative">
-      <div className="relative group">
+    <form onSubmit={handleSearch} className="w-full relative group">
+      <div 
+        className={`
+          absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full opacity-20 group-hover:opacity-40 transition duration-500 blur-lg
+          ${isFocused ? 'opacity-60 blur-xl' : ''}
+        `}
+      />
+      <div className="relative flex items-center">
+        <Search 
+          className={`absolute left-5 w-6 h-6 transition-colors duration-300 ${isFocused ? 'text-blue-400' : 'text-slate-400'}`} 
+        />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find ads with nostalgia, car chases, or family dinners..."
-          className="w-full px-6 py-4 text-lg rounded-full border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-lg text-gray-800 placeholder:text-gray-400"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder="Describe the ad you're looking for..."
+          className="w-full h-16 pl-14 pr-6 bg-white/10 backdrop-blur-xl border border-white/10 rounded-full text-lg text-white placeholder-slate-400 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all duration-300 shadow-2xl"
         />
-        <button
-          type="submit"
-          className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full transition-colors"
-          aria-label="Search"
-        >
-          <Search size={24} />
-        </button>
+        <div className="absolute right-3 p-1.5 bg-white/10 rounded-full text-xs font-medium text-slate-400 border border-white/5 hidden sm:block">
+          ⏎
+        </div>
       </div>
     </form>
   );
 }
-
