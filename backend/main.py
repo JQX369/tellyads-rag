@@ -63,7 +63,7 @@ class AdDetail(BaseModel):
     video_url: Optional[str] = None
     image_url: Optional[str] = None
 
-from .csv_parser import get_video_url_from_csv, get_image_url_from_csv
+from backend.csv_parser import get_video_url_from_csv, get_image_url_from_csv
 
 # --- Endpoints ---
 
