@@ -13,12 +13,15 @@ interface Ad {
   id: string;
   external_id: string;
   brand_name?: string;
+  brand_slug?: string;
+  slug?: string;
   product_name?: string;
   year?: number;
   image_url?: string;
   one_line_summary?: string;
   product_category?: string;
   duration_seconds?: number;
+  canonical_url?: string;
 }
 
 const decades = ["1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
@@ -357,8 +360,11 @@ function FilterSection({ title, children }: { title: string; children: React.Rea
 }
 
 function AdCard({ ad }: { ad: Ad }) {
+  // Use canonical URL format: /advert/{brand}/{slug} if available, otherwise /ads/{external_id}
+  const adUrl = ad.canonical_url || `/ads/${ad.external_id}`;
+
   return (
-    <Link href={`/ads/${ad.external_id}`}>
+    <Link href={adUrl}>
       <article
         className={clsx(
           "group relative",

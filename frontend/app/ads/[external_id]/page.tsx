@@ -17,8 +17,13 @@ interface AdPageProps {
 }
 
 async function getAdDetail(external_id: string): Promise<AdDetail> {
+  // Use internal API route - construct absolute URL for server-side fetch
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/ads/${external_id}`,
+    `${baseUrl}/api/ads/${external_id}`,
     {
       cache: "no-store",
     }
@@ -33,8 +38,13 @@ async function getAdDetail(external_id: string): Promise<AdDetail> {
 
 async function getSimilarAds(external_id: string): Promise<any[]> {
   try {
+    // Use internal API route
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/ads/${external_id}/similar?limit=5`,
+      `${baseUrl}/api/ads/${external_id}/similar?limit=5`,
       {
         next: { revalidate: 3600 },
       }

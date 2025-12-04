@@ -56,13 +56,9 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
         a.year,
         a.duration_seconds,
         a.s3_key,
-        a.thumbnail_url,
-        a.video_url,
         a.has_supers,
         a.has_price_claims,
         a.impact_scores,
-        a.emotional_metrics,
-        a.effectiveness,
         a.hero_analysis,
         a.created_at,
         e.brand_slug,
@@ -73,20 +69,9 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
         e.is_featured,
         e.seo_title,
         e.seo_description,
-        e.legacy_url,
-        f.view_count,
-        f.like_count,
-        f.save_count,
-        f.ai_score,
-        f.user_score,
-        f.confidence_weight,
-        f.final_score,
-        f.reason_counts,
-        f.distinct_reason_sessions,
-        f.reason_threshold_met
+        e.legacy_url
       FROM ad_editorial e
       JOIN ads a ON a.id = e.ad_id
-      LEFT JOIN ad_feedback_aggregates f ON f.ad_id = a.id
       WHERE e.brand_slug = $1
         AND e.slug = $2
         AND ${PUBLISH_GATE_CONDITION}
@@ -111,22 +96,24 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
       format_type: row.format_type,
       year: row.year,
       duration_seconds: row.duration_seconds,
-      video_url: row.video_url,
-      thumbnail_url: row.thumbnail_url,
+      // Note: video_url/thumbnail_url not stored in ads table, would need CSV lookup
+      video_url: null,
+      thumbnail_url: null,
       impact_scores: row.impact_scores,
       hero_analysis: row.hero_analysis,
       curated_tags: row.curated_tags || [],
       is_featured: row.is_featured || false,
-      view_count: row.view_count || 0,
-      like_count: row.like_count || 0,
-      save_count: row.save_count || 0,
-      ai_score: row.ai_score,
-      user_score: row.user_score,
-      confidence_weight: row.confidence_weight,
-      final_score: row.final_score,
-      reason_counts: row.reason_counts,
-      distinct_reason_sessions: row.distinct_reason_sessions,
-      reason_threshold_met: row.reason_threshold_met || false,
+      // Feedback aggregates not available (table doesn't exist)
+      view_count: 0,
+      like_count: 0,
+      save_count: 0,
+      ai_score: undefined,
+      user_score: undefined,
+      confidence_weight: undefined,
+      final_score: undefined,
+      reason_counts: undefined,
+      distinct_reason_sessions: undefined,
+      reason_threshold_met: false,
     };
   } catch (error) {
     console.error('Error fetching ad:', error);
