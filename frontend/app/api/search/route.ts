@@ -26,10 +26,16 @@ const RATE_LIMIT_CONFIG = {
 const MIN_QUERY_LENGTH = 2;
 const MAX_QUERY_LENGTH = 300;
 
-// Initialize OpenAI client for embeddings
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy OpenAI client initialization (avoids build-time API key requirement)
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 interface SearchRequest {
   query: string;
@@ -103,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate embedding for query
-    const embeddingResponse = await openai.embeddings.create({
+    const embeddingResponse = await getOpenAI().embeddings.create({
       model: 'text-embedding-3-large',
       input: trimmedQuery,
       dimensions: 1536,
@@ -159,8 +165,7 @@ export async function POST(request: NextRequest) {
         a.format_type,
         a.year,
         a.duration_seconds,
-        a.thumbnail_url,
-        a.video_url,
+        a.s3_key,
         a.has_supers,
         a.has_price_claims,
         a.impact_scores,
@@ -194,8 +199,10 @@ export async function POST(request: NextRequest) {
       format_type: row.format_type,
       year: row.year,
       duration_seconds: row.duration_seconds,
-      thumbnail_url: row.thumbnail_url,
-      video_url: row.video_url,
+      s3_key: row.s3_key,
+      // Note: thumbnail_url/video_url not stored in DB, would need CSV lookup or S3 generation
+      thumbnail_url: null,
+      video_url: null,
       has_supers: row.has_supers,
       has_price_claims: row.has_price_claims,
       impact_scores: row.impact_scores,
