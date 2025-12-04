@@ -13,6 +13,11 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
+    // Debug: log connection string (masked)
+    const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || 'NOT SET';
+    const maskedUrl = dbUrl !== 'NOT SET' ? dbUrl.replace(/:[^@]+@/, ':***@') : dbUrl;
+    console.log('[Status API] DB URL:', maskedUrl);
+
     // Test database connection
     const result = await queryOne('SELECT 1 as ok');
 

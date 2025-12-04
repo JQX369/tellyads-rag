@@ -2,7 +2,7 @@
  * Next.js Middleware for Legacy URL Redirects
  *
  * Handles redirects from old Wix URLs to new canonical URLs.
- * Legacy URLs are stored in ad_editorial.legacy_url field.
+ * Legacy URLs are matched by slug patterns via API route.
  */
 
 import { NextRequest, NextResponse } from 'next/server';

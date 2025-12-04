@@ -119,19 +119,19 @@ export const PUBLISH_GATE_CONDITION = `
 `;
 
 // Common ad fields to select (avoids selecting huge JSONB columns)
+// Note: ads table does NOT have thumbnail_url or video_url columns - use s3_key only
 export const AD_SELECT_FIELDS = `
-  id, external_id, brand_name, brand_slug, product_name, product_category,
+  id, external_id, brand_name, product_name, product_category,
   one_line_summary, format_type, year, duration_seconds,
-  s3_key, thumbnail_url, video_url,
+  s3_key,
   has_supers, has_price_claims,
   impact_scores, emotional_metrics, effectiveness,
   created_at, updated_at
 `;
 
-// Editorial fields
+// Editorial fields (matches ad_editorial table schema)
 export const EDITORIAL_SELECT_FIELDS = `
   id, ad_id, brand_slug, slug, headline, editorial_summary,
   curated_tags, status, publish_date, is_hidden, is_featured,
-  seo_title, seo_description, legacy_url,
   created_at, updated_at
 `;

@@ -36,6 +36,11 @@ const hstsHeader = {
 };
 
 const nextConfig: NextConfig = {
+  // Set turbopack root to prevent it from detecting parent directories
+  turbopack: {
+    root: process.cwd(),
+  },
+
   // Image optimization
   images: {
     remotePatterns: [

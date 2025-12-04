@@ -66,10 +66,7 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
         e.headline,
         e.editorial_summary,
         e.curated_tags,
-        e.is_featured,
-        e.seo_title,
-        e.seo_description,
-        e.legacy_url
+        e.is_featured
       FROM ad_editorial e
       JOIN ads a ON a.id = e.ad_id
       WHERE e.brand_slug = $1

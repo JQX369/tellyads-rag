@@ -41,8 +41,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
         a.year,
         a.duration_seconds,
         a.s3_key,
-        a.thumbnail_url,
-        a.video_url,
         a.has_supers,
         a.has_price_claims,
         a.impact_scores,
@@ -57,25 +55,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
         e.editorial_summary,
         e.curated_tags,
         e.is_featured,
-        e.seo_title,
-        e.seo_description,
-        e.legacy_url,
         e.status as editorial_status,
         e.publish_date,
-        -- Feedback metrics
+        -- Feedback metrics (from ad_feedback_agg)
         f.view_count,
         f.like_count,
         f.save_count,
-        f.ai_score,
-        f.user_score,
-        f.confidence_weight,
-        f.final_score,
-        f.reason_counts,
-        f.distinct_reason_sessions,
-        f.reason_threshold_met
+        f.engagement_score,
+        f.tag_counts
       FROM ad_editorial e
       JOIN ads a ON a.id = e.ad_id
-      LEFT JOIN ad_feedback_aggregates f ON f.ad_id = a.id
+      LEFT JOIN ad_feedback_agg f ON f.ad_id = a.id
       WHERE e.brand_slug = $1
         AND e.slug = $2
         AND ${PUBLISH_GATE_CONDITION}
@@ -108,9 +98,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       format_type: row.format_type,
       year: row.year,
       duration_seconds: row.duration_seconds,
-      // Media
-      video_url: row.video_url,
-      thumbnail_url: row.thumbnail_url,
+      // Media (video_url and thumbnail_url derived from s3_key if needed)
+      video_url: null, // Would need to generate from s3_key
+      thumbnail_url: null, // Would need to generate from s3_key
       s3_key: row.s3_key,
       // Analysis
       has_supers: row.has_supers,
@@ -122,20 +112,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       // Editorial
       curated_tags: row.curated_tags || [],
       is_featured: row.is_featured || false,
-      seo_title: row.seo_title,
-      seo_description: row.seo_description,
-      legacy_url: row.legacy_url,
       // Feedback metrics
       view_count: row.view_count || 0,
       like_count: row.like_count || 0,
       save_count: row.save_count || 0,
-      ai_score: row.ai_score,
-      user_score: row.user_score,
-      confidence_weight: row.confidence_weight,
-      final_score: row.final_score,
-      reason_counts: row.reason_counts,
-      distinct_reason_sessions: row.distinct_reason_sessions,
-      reason_threshold_met: row.reason_threshold_met || false,
+      engagement_score: row.engagement_score || 0,
+      tag_counts: row.tag_counts || {},
       // Timestamps
       created_at: row.created_at,
     };

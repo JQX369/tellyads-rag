@@ -3,7 +3,7 @@
  *
  * GET /api/legacy-redirect?path=/post/brand-product-year
  *
- * Looks up legacy_url in ad_editorial and returns a 301 redirect
+ * Matches legacy Wix URLs by slug patterns and returns a 301 redirect
  * to the canonical URL.
  */
 
@@ -26,35 +26,34 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Look up by legacy_url - try with and without leading slash
     const normalizedPath = legacyPath.startsWith('/') ? legacyPath : `/${legacyPath}`;
 
-    const row = await queryOne(
-      `
-      SELECT
-        e.brand_slug,
-        e.slug
-      FROM ad_editorial e
-      WHERE (e.legacy_url = $1 OR e.legacy_url = $2)
-        AND ${PUBLISH_GATE_CONDITION}
-      LIMIT 1
-      `,
-      [normalizedPath, normalizedPath.substring(1)]
-    );
-
-    if (row) {
-      // Found! Redirect to canonical URL
-      const canonicalUrl = `${BASE_URL}/advert/${row.brand_slug}/${row.slug}`;
-      return NextResponse.redirect(canonicalUrl, 301);
-    }
-
-    // Try matching by slug patterns from the legacy URL
-    // e.g., /post/brand-product-year -> extract parts
+    // Extract slug from legacy URL pattern: /post/brand-product-year
     const slugFromPath = normalizedPath
       .replace('/post/', '')
       .replace(/^\//, '')
       .toLowerCase();
 
+    // Try exact slug match first
+    const exactMatch = await queryOne(
+      `
+      SELECT
+        e.brand_slug,
+        e.slug
+      FROM ad_editorial e
+      WHERE e.slug = $1
+        AND ${PUBLISH_GATE_CONDITION}
+      LIMIT 1
+      `,
+      [slugFromPath]
+    );
+
+    if (exactMatch) {
+      const canonicalUrl = `${BASE_URL}/advert/${exactMatch.brand_slug}/${exactMatch.slug}`;
+      return NextResponse.redirect(canonicalUrl, 301);
+    }
+
+    // Try fuzzy matching by slug
     const fuzzyMatch = await queryOne(
       `
       SELECT
