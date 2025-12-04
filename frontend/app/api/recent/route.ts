@@ -24,10 +24,8 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Toxicity filter
-    conditions.push(`COALESCE((a.toxicity_scores->>'toxicity_score')::float, 0) <= $${paramIndex}`);
-    params.push(maxToxicity);
-    paramIndex++;
+    // Note: toxicity_scores column may not exist in all deployments, skip filter for now
+    // Future: Add toxicity filtering when column is confirmed to exist
 
     // Featured filter
     if (featured) {
@@ -52,23 +50,17 @@ export async function GET(request: NextRequest) {
         a.format_type,
         a.year,
         a.duration_seconds,
-        a.thumbnail_url,
-        a.video_url,
+        a.s3_key,
         a.has_supers,
         a.impact_scores,
-        a.toxicity_scores,
         a.created_at,
         e.brand_slug,
         e.slug,
         e.headline,
         e.curated_tags,
-        e.is_featured,
-        f.view_count,
-        f.like_count,
-        f.final_score
+        e.is_featured
       FROM ads a
       LEFT JOIN ad_editorial e ON e.ad_id = a.id AND ${PUBLISH_GATE_CONDITION}
-      LEFT JOIN ad_feedback_aggregates f ON f.ad_id = a.id
       ${whereClause}
       ORDER BY a.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -89,15 +81,15 @@ export async function GET(request: NextRequest) {
       format_type: row.format_type,
       year: row.year,
       duration_seconds: row.duration_seconds,
-      thumbnail_url: row.thumbnail_url,
-      video_url: row.video_url,
+      s3_key: row.s3_key,
+      // Note: thumbnail_url/video_url not stored in DB, would need CSV lookup or S3 generation
+      thumbnail_url: null,
+      video_url: null,
+      image_url: null,  // For Browse page compatibility
       has_supers: row.has_supers,
       impact_scores: row.impact_scores,
       curated_tags: row.curated_tags || [],
       is_featured: row.is_featured || false,
-      view_count: row.view_count || 0,
-      like_count: row.like_count || 0,
-      final_score: row.final_score,
       created_at: row.created_at,
       canonical_url: row.brand_slug && row.slug
         ? `/advert/${row.brand_slug}/${row.slug}`
@@ -107,6 +99,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       total: formattedResults.length,
       results: formattedResults,
+      ads: formattedResults,  // Alias for Browse page compatibility
     }, {
       headers: {
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
