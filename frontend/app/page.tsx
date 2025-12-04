@@ -1,89 +1,188 @@
-import SearchBar from '@/components/SearchBar';
-import Link from 'next/link';
+import { Suspense } from "react";
+import { Header, Footer } from "@/components/layout";
+import { Hero, DecadeNav, CategoryShowcase, FeaturedAds } from "@/components/sections";
 
-export default function Home() {
+// Import db directly for server-side data fetching (no HTTP round-trip)
+import { queryAll, queryOne, PUBLISH_GATE_CONDITION } from "@/lib/db";
+
+// Fetch featured ads server-side (direct DB query)
+async function getFeaturedAds() {
+  try {
+    const results = await queryAll(
+      `
+      SELECT
+        a.id,
+        a.external_id,
+        a.brand_name,
+        a.one_line_summary,
+        a.thumbnail_url,
+        a.video_url,
+        a.year,
+        a.duration_seconds,
+        e.brand_slug,
+        e.slug,
+        e.headline,
+        e.is_featured
+      FROM ads a
+      LEFT JOIN ad_editorial e ON e.ad_id = a.id AND ${PUBLISH_GATE_CONDITION}
+      WHERE COALESCE((a.toxicity_scores->>'toxicity_score')::float, 0) <= 0.7
+      ORDER BY a.created_at DESC
+      LIMIT 6
+      `
+    );
+
+    return results.map((row) => ({
+      id: row.id,
+      external_id: row.external_id,
+      brand_name: row.brand_name,
+      headline: row.headline || row.one_line_summary,
+      thumbnail_url: row.thumbnail_url,
+      video_url: row.video_url,
+      year: row.year,
+      duration_seconds: row.duration_seconds,
+      brand_slug: row.brand_slug,
+      slug: row.slug,
+      is_featured: row.is_featured,
+      canonical_url: row.brand_slug && row.slug
+        ? `/advert/${row.brand_slug}/${row.slug}`
+        : `/ads/${row.external_id}`,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch featured ads:", error);
+    return [];
+  }
+}
+
+// Get site stats (direct DB query)
+async function getStats() {
+  try {
+    const counts = await queryOne(`
+      SELECT
+        COUNT(*) as total_ads,
+        COUNT(DISTINCT brand_name) as total_brands
+      FROM ads
+    `);
+
+    return {
+      total_ads: parseInt(counts?.total_ads || "0", 10),
+      total_brands: parseInt(counts?.total_brands || "0", 10),
+    };
+  } catch (error) {
+    console.error("Failed to fetch stats:", error);
+    return null;
+  }
+}
+
+export default async function HomePage() {
+  const [featuredAds, stats] = await Promise.all([
+    getFeaturedAds(),
+    getStats(),
+  ]);
+
   return (
-    <main className="flex flex-col min-h-screen relative overflow-hidden">
-      
-      {/* Background Gradient Mesh (Decorative) */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-blue-500/20 rounded-full blur-[120px] -z-10 pointer-events-none mix-blend-screen" />
-      <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-purple-500/10 rounded-full blur-[120px] -z-10 pointer-events-none mix-blend-screen" />
+    <>
+      <Header />
 
-      {/* Navigation */}
-      <nav className="w-full max-w-7xl mx-auto px-6 py-6 flex justify-between items-center z-50">
-        <div className="text-2xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-          TellyAds
-        </div>
-        <div className="space-x-8 text-sm font-medium text-muted-foreground">
-          <Link href="/about" className="hover:text-white transition-colors duration-300">About</Link>
-          <Link href="/how-it-works" className="hover:text-white transition-colors duration-300">How it Works</Link>
-        </div>
-      </nav>
+      <main className="min-h-screen">
+        {/* Hero Section */}
+        <Hero />
 
-      {/* Hero Section */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 relative z-10">
-        <div className="max-w-4xl mx-auto text-center space-y-8">
-          
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-blue-200 animate-fade-in">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-            </span>
-            Now Indexing 20,000+ Commercials
-          </div>
+        {/* Featured Ads Carousel */}
+        <Suspense fallback={<FeaturedAdsSkeleton />}>
+          <FeaturedAds
+            ads={featuredAds}
+            title="Now Showing"
+            subtitle="Featured"
+          />
+        </Suspense>
 
-          <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-white leading-[1.1] animate-slide-up">
-            Search TV Ads with <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">
-              Semantic Intelligence
-            </span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            Find commercials by concept, emotion, or visual content. 
-            The world's most advanced advertising search engine.
-          </p>
-          
-          <div className="w-full max-w-2xl mx-auto pt-8 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            <SearchBar />
-          </div>
+        {/* Decade Navigation */}
+        <DecadeNav />
 
-          {/* Example Tags */}
-          <div className="pt-10 flex flex-wrap justify-center gap-3 animate-slide-up" style={{ animationDelay: '0.3s' }}>
-            {[
-              "🚗 Car commercials with road trips",
-              "🥺 Nostalgic 90s ads",
-              "🍫 Chocolate ads with humor"
-            ].map((tag) => (
-              <button 
-                key={tag}
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-muted-foreground hover:text-white hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer"
+        {/* Category Showcase */}
+        <CategoryShowcase />
+
+        {/* Stats Section */}
+        {stats && (
+          <section className="py-24 bg-static/20">
+            <div className="max-w-7xl mx-auto px-6 lg:px-12">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+                <StatBlock
+                  value={stats.total_ads?.toLocaleString() || "20,000+"}
+                  label="Adverts"
+                />
+                <StatBlock value="20+" label="Years of History" />
+                <StatBlock
+                  value="2,000+"
+                  label="Brands"
+                />
+                <StatBlock value="12" label="Categories" />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* CTA Section */}
+        <section className="py-32 relative overflow-hidden">
+          <div className="absolute inset-0 grid-lines opacity-20" />
+          <div className="relative max-w-4xl mx-auto px-6 lg:px-12 text-center">
+            <h2 className="font-display text-display-lg font-bold text-signal mb-6">
+              Ready to Explore?
+            </h2>
+            <p className="font-mono text-lg text-antenna mb-10 max-w-xl mx-auto">
+              Dive into decades of advertising history. Find inspiration,
+              research competitors, or just enjoy the nostalgia.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a
+                href="/browse"
+                className="inline-flex items-center justify-center px-8 py-4 font-mono uppercase tracking-ultra-wide text-sm bg-transmission text-signal rounded-pill hover:bg-transmission-dark transition-colors"
               >
-                {tag}
-              </button>
-            ))}
+                Browse the Archive
+              </a>
+              <a
+                href="/random"
+                className="inline-flex items-center justify-center px-8 py-4 font-mono uppercase tracking-ultra-wide text-sm bg-transparent text-signal border-2 border-white/20 rounded-pill hover:border-transmission hover:text-transmission transition-colors"
+              >
+                Surprise Me
+              </a>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
 
-      {/* Footer Stats */}
-      <div className="border-t border-white/5 bg-black/20 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-          <div>
-            <div className="text-4xl font-bold text-white mb-1 tracking-tight">20k+</div>
-            <div className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Indexed Ads</div>
-          </div>
-          <div>
-            <div className="text-4xl font-bold text-white mb-1 tracking-tight">1.5k+</div>
-            <div className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Brands</div>
-          </div>
-          <div>
-            <div className="text-4xl font-bold text-white mb-1 tracking-tight">Daily</div>
-            <div className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Updates</div>
-          </div>
+      <Footer />
+    </>
+  );
+}
+
+function StatBlock({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="font-display text-4xl md:text-5xl font-bold text-signal">
+        {value}
+      </span>
+      <span className="font-mono text-label uppercase tracking-ultra-wide text-antenna">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function FeaturedAdsSkeleton() {
+  return (
+    <section className="py-24">
+      <div className="max-w-7xl mx-auto px-6 lg:px-12">
+        <div className="h-8 w-48 bg-static/50 rounded mb-12 animate-pulse" />
+        <div className="flex gap-6 overflow-hidden">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex-shrink-0 w-[320px] md:w-[400px] aspect-[4/3] bg-static/30 rounded animate-pulse"
+            />
+          ))}
         </div>
       </div>
-    </main>
+    </section>
   );
 }

@@ -157,18 +157,33 @@ Return a single valid JSON object with ALL 22 sections below. Structure your res
   "emotional_timeline": {{
     "readings": [
       {{
-        "t_s": <float - timestamp in seconds>,
-        "dominant_emotion": "<joy|surprise|trust|anticipation|sadness|fear|anger|disgust|neutral>",
+        "t_s": <float - timestamp, provide reading every 1-2 seconds for granular tracking>,
+        "dominant_emotion": "<joy|surprise|trust|anticipation|sadness|fear|anger|disgust|neutral|excitement|nostalgia|tension|relief|pride|empathy>",
+        "secondary_emotion": "<emotion or null - if a secondary emotion is present>",
         "intensity": <0.0-1.0>,
         "valence": <-1.0 to 1.0, negative to positive>,
-        "arousal": <0.0-1.0, calm to excited>
+        "arousal": <0.0-1.0, calm to excited>,
+        "trigger": "<what caused this emotion - visual|audio|dialogue|music|pacing|reveal>"
       }}
     ],
-    "arc_shape": "<flat|rising|falling|peak_early|peak_late|peak_middle|u_shape|inverted_u|rollercoaster>",
+    "emotional_transitions": [
+      {{
+        "from_emotion": "<emotion>",
+        "to_emotion": "<emotion>",
+        "transition_time_s": <float - when the transition occurs>,
+        "transition_type": "<gradual|sudden|contrast>",
+        "effectiveness": <0.0-1.0, how well does this transition work?>
+      }}
+    ],
+    "arc_shape": "<flat|rising|falling|peak_early|peak_late|peak_middle|u_shape|inverted_u|rollercoaster|double_peak>",
     "peak_moment_s": <float>,
     "peak_emotion": "<emotion at peak>",
+    "trough_moment_s": <float or null - lowest emotional point>,
+    "trough_emotion": "<emotion at trough or null>",
     "average_intensity": <0.0-1.0>,
-    "positive_ratio": <0.0-1.0, proportion of positive emotional moments>
+    "positive_ratio": <0.0-1.0, proportion of positive emotional moments>,
+    "emotional_range": <0.0-1.0, how much emotion varies throughout - 0=flat, 1=extreme variation>,
+    "final_viewer_state": "<emotion the viewer is left feeling at the end>"
   }},
 
   "attention_dynamics": {{
@@ -271,14 +286,31 @@ Return a single valid JSON object with ALL 22 sections below. Structure your res
       "screen_time_pct": <0.0-1.0>,
       "gender": "<male|female|non_binary|unclear>",
       "age_bracket": "<child|teen|18_24|25_34|35_44|45_54|55_64|65_plus|ageless>",
-      "ethnicity": "<string or 'diverse_cast'>",
+      "ethnicity": {{
+        "primary": "<white_european|white_american|black_african|black_caribbean|black_american|east_asian|south_asian|southeast_asian|middle_eastern|hispanic_latino|indigenous|pacific_islander|mixed|unclear>",
+        "regional_detail": "<string - more specific if identifiable, e.g., 'British', 'Nigerian', 'Korean', 'Indian', or null>",
+        "confidence": <0.0-1.0>
+      }},
       "is_celebrity": <bool>,
       "celebrity_name": "<string or null>",
       "character_type": "<relatable_everyman|aspirational|expert|authority|comedic|villain|mascot|real_person>",
+      "physical_traits": {{
+        "hair_color": "<blonde|brunette|black|red|grey|bald|other|unclear>",
+        "distinctive_features": "<string describing notable features or null>"
+      }},
       "relatability_score": <0.0-10.0>,
       "likability_score": <0.0-10.0>
     }}
   ],
+
+  "cast_diversity": {{
+    "total_characters": <int - total number of characters with speaking or significant screen time>,
+    "gender_breakdown": {{"male": <int>, "female": <int>, "non_binary": <int>, "unclear": <int>}},
+    "ethnicity_breakdown": {{"<ethnicity_primary>": <int>}},
+    "age_range_present": ["<list of age_brackets present in the cast>"],
+    "diversity_score": <0.0-10.0, higher = more diverse representation across gender, ethnicity, age>,
+    "representation_notes": "<string - any notable inclusion/exclusion patterns, stereotypes, or representation choices>"
+  }},
 
   "cta_offer": {{
     "has_cta": <bool>,
@@ -505,7 +537,10 @@ Return a single valid JSON object with ALL 22 sections below. Structure your res
 - All scores use the correct scale (0-10 or 0-1 as specified)
 - All timestamps are in seconds (floats)
 - impact_scores all have rationale/evidence
-- emotional_timeline has at least 1 reading per 5 seconds
+- emotional_timeline has at least 1 reading per 2 seconds (granular tracking)
+- emotional_transitions captures all significant emotion shifts
+- characters have detailed ethnicity breakdown with primary category and regional_detail
+- cast_diversity totals match the characters array
 - storyboard covers all shots (no gaps)
 - claims are verbatim text from the ad
 - effectiveness_drivers has both strengths AND weaknesses
@@ -573,11 +608,16 @@ DEFAULT_SECTIONS = {
     },
     "emotional_timeline": {
         "readings": [],
+        "emotional_transitions": [],
         "arc_shape": "flat",
         "peak_moment_s": None,
         "peak_emotion": "neutral",
+        "trough_moment_s": None,
+        "trough_emotion": None,
         "average_intensity": 0.5,
         "positive_ratio": 0.5,
+        "emotional_range": 0.5,
+        "final_viewer_state": "neutral",
     },
     "attention_dynamics": {
         "predicted_completion_rate": 0.5,
@@ -634,6 +674,14 @@ DEFAULT_SECTIONS = {
     },
     "distinctive_assets": [],
     "characters": [],
+    "cast_diversity": {
+        "total_characters": 0,
+        "gender_breakdown": {"male": 0, "female": 0, "non_binary": 0, "unclear": 0},
+        "ethnicity_breakdown": {},
+        "age_range_present": [],
+        "diversity_score": 5.0,
+        "representation_notes": None,
+    },
     "cta_offer": {
         "has_cta": False,
         "cta_type": "none",
@@ -720,6 +768,8 @@ __all__ = [
     "DEFAULT_SECTIONS",
     "deep_merge",
 ]
+
+
 
 
 

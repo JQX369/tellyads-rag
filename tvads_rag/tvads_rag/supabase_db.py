@@ -20,7 +20,9 @@ from .db import (
     SEGMENT_COLUMNS,
     CHUNK_COLUMNS,
     CLAIM_COLUMNS,
+    CLAIM_JSONB_COLUMNS,
     SUPER_COLUMNS,
+    SUPER_JSONB_COLUMNS,
     STORYBOARD_COLUMNS,
     DEFAULT_HYBRID_ITEM_TYPES,
 )
@@ -94,8 +96,14 @@ def ad_exists(*, external_id: Optional[str] = None, s3_key: Optional[str] = None
 
 def insert_ad(ad_data: Mapping[str, Any]) -> str:
     """Insert a row into ads and return the generated UUID via HTTP."""
+    from .schema_check import validate_schema_http
+
     row = {column: ad_data.get(column) for column in AD_COLUMNS}
     client = _get_client()
+
+    # Validate schema has required columns (cached after first call)
+    validate_schema_http(client)
+
     # Insert with returning clause to get the ID back
     resp = client.table("ads").insert(row).execute()
     data = getattr(resp, "data", None) or []
@@ -135,6 +143,172 @@ def update_processing_notes(ad_id: str, notes: dict) -> None:
             logger.warning("Failed to update processing_notes for ad %s: %s", ad_id, str(e)[:100])
 
 
+def update_visual_objects(ad_id: str, visual_objects: dict) -> None:
+    """Update visual_objects field for an ad (object detection results)."""
+    client = _get_client()
+    try:
+        resp = client.table("ads").update({"visual_objects": visual_objects}).eq("id", ad_id).execute()
+        data = getattr(resp, "data", None) or []
+        if not data:
+            logger.warning("Failed to update visual_objects for ad %s", ad_id)
+        else:
+            logger.debug("Updated visual_objects for ad %s", ad_id)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "column" in error_msg and "does not exist" in error_msg:
+            logger.debug(
+                "visual_objects column not yet added to database. "
+                "Run migration: ALTER TABLE ads ADD COLUMN visual_objects jsonb DEFAULT '{}'::jsonb;"
+            )
+        else:
+            logger.warning("Failed to update visual_objects for ad %s: %s", ad_id, str(e)[:100])
+
+
+def update_video_analytics(
+    ad_id: str,
+    visual_physics: dict,
+    spatial_telemetry: dict,
+    color_psychology: dict,
+) -> None:
+    """Update video analytics fields for an ad."""
+    client = _get_client()
+    try:
+        resp = (
+            client.table("ads")
+            .update({
+                "visual_physics": visual_physics,
+                "spatial_telemetry": spatial_telemetry,
+                "color_psychology": color_psychology,
+            })
+            .eq("id", ad_id)
+            .execute()
+        )
+        data = getattr(resp, "data", None) or []
+        if not data:
+            logger.warning("Failed to update video analytics for ad %s", ad_id)
+        else:
+            logger.debug("Updated video analytics for ad %s", ad_id)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "column" in error_msg and "does not exist" in error_msg:
+            logger.debug(
+                "Video analytics columns not yet added to database. "
+                "Run migration to add visual_physics, spatial_telemetry, color_psychology columns."
+            )
+        else:
+            logger.warning("Failed to update video analytics for ad %s: %s", ad_id, str(e)[:100])
+
+
+def update_physics_data(ad_id: str, physics_data: dict) -> None:
+    """Update unified physics_data field for an ad (from PhysicsExtractor)."""
+    client = _get_client()
+    try:
+        resp = client.table("ads").update({"physics_data": physics_data}).eq("id", ad_id).execute()
+        data = getattr(resp, "data", None) or []
+        if not data:
+            logger.warning("Failed to update physics_data for ad %s", ad_id)
+        else:
+            logger.debug("Updated physics_data for ad %s", ad_id)
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "column" in error_msg and "does not exist" in error_msg:
+            logger.debug(
+                "physics_data column not yet added to database. "
+                "Run migration: ALTER TABLE ads ADD COLUMN physics_data jsonb DEFAULT '{}'::jsonb;"
+            )
+        else:
+            logger.warning("Failed to update_physics_data for ad %s: %s", ad_id, str(e)[:100])
+
+
+def update_toxicity_report(ad_id: str, toxicity_report: dict) -> None:
+    """
+    Update toxicity fields for an ad via HTTP.
+
+    Persists both:
+    - Explicit columns for filtering (toxicity_total, toxicity_risk_level, etc.)
+    - Full toxicity_report JSONB for detailed analysis
+    """
+    # Extract explicit column values from the report
+    toxicity_total = toxicity_report.get("toxic_score")
+    toxicity_risk_level = toxicity_report.get("risk_level")
+
+    # Extract dark pattern labels
+    dark_patterns = toxicity_report.get("dark_patterns_detected", [])
+    breakdown = toxicity_report.get("breakdown", {})
+    toxicity_labels = []
+    for category in ["physiological", "psychological", "regulatory"]:
+        cat_data = breakdown.get(category, {})
+        for flag in cat_data.get("flags", []):
+            if "Detected" in flag:
+                label = flag.split(" Detected")[0].lower().replace(" ", "_")
+                if label not in toxicity_labels:
+                    toxicity_labels.append(label)
+    for pattern in dark_patterns:
+        if pattern and pattern not in toxicity_labels:
+            toxicity_labels.append(pattern)
+
+    # Extract subscores
+    toxicity_subscores = {
+        "physiological": breakdown.get("physiological", {}),
+        "psychological": breakdown.get("psychological", {}),
+        "regulatory": breakdown.get("regulatory", {}),
+    }
+
+    # Determine version
+    metadata = toxicity_report.get("metadata", {})
+    ai_enabled = metadata.get("ai_enabled", False)
+    toxicity_version = "1.1.0-ai" if ai_enabled else "1.0.0"
+
+    client = _get_client()
+    try:
+        # Try to update all columns (new schema)
+        resp = (
+            client.table("ads")
+            .update({
+                "toxicity_total": toxicity_total,
+                "toxicity_risk_level": toxicity_risk_level,
+                "toxicity_labels": toxicity_labels,
+                "toxicity_subscores": toxicity_subscores,
+                "toxicity_version": toxicity_version,
+                "toxicity_report": toxicity_report,
+            })
+            .eq("id", ad_id)
+            .execute()
+        )
+        data = getattr(resp, "data", None) or []
+        if not data:
+            logger.warning("Failed to update toxicity for ad %s", ad_id)
+        else:
+            logger.debug(
+                "Updated toxicity for ad %s (score: %s, risk: %s, version: %s)",
+                ad_id, toxicity_total, toxicity_risk_level, toxicity_version
+            )
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "column" in error_msg and "does not exist" in error_msg:
+            # Fallback: try updating just toxicity_report (old schema)
+            try:
+                resp = (
+                    client.table("ads")
+                    .update({"toxicity_report": toxicity_report})
+                    .eq("id", ad_id)
+                    .execute()
+                )
+                logger.debug(
+                    "Updated toxicity_report (legacy) for ad %s. "
+                    "Run schema_toxicity_columns.sql for full support.",
+                    ad_id
+                )
+            except Exception as e2:
+                logger.warning(
+                    "Failed to update toxicity for ad %s. "
+                    "Run migration: tvads_rag/schema_toxicity_columns.sql. Error: %s",
+                    ad_id, str(e2)[:100]
+                )
+        else:
+            logger.warning("Failed to update toxicity for ad %s: %s", ad_id, str(e)[:100])
+
+
 def _insert_many(table: str, rows: Iterable[Sequence[Any]]) -> Sequence[str]:
     rows_list = list(rows)
     if not rows_list:
@@ -170,6 +344,12 @@ def insert_chunks(ad_id: str, chunks: Iterable[Mapping[str, Any]]) -> Sequence[s
 
 def insert_claims(ad_id: str, claims: Iterable[Mapping[str, Any]]) -> Sequence[str]:
     """Insert ad_claims rows via HTTP."""
+    from .schema_check import validate_table_schema_http
+
+    # Validate schema has required evidence columns (cached after first call)
+    client = _get_client()
+    validate_table_schema_http(client, "ad_claims")
+
     rows = []
     for claim in claims or []:
         rows.append(
@@ -181,6 +361,12 @@ def insert_claims(ad_id: str, claims: Iterable[Mapping[str, Any]]) -> Sequence[s
 
 def insert_supers(ad_id: str, supers: Iterable[Mapping[str, Any]]) -> Sequence[str]:
     """Insert ad_supers rows via HTTP."""
+    from .schema_check import validate_table_schema_http
+
+    # Validate schema has required evidence columns (cached after first call)
+    client = _get_client()
+    validate_table_schema_http(client, "ad_supers")
+
     rows = []
     for sup in supers or []:
         rows.append(

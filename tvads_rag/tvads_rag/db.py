@@ -70,6 +70,14 @@ AD_COLUMNS = [
     "emotional_metrics",
     "effectiveness",
     "extraction_version",
+    # Extraction observability columns (Dec 2025)
+    "extraction_warnings",
+    "extraction_fill_rate",
+    "extraction_validation",
+    # Regulatory clearance columns (Dec 2025)
+    "clearance_body",
+    "clearance_id",
+    "clearance_country",
     # Note: processing_notes is NOT in this list - it's updated separately after insert
     # when storyboard errors occur (safety blocks, timeouts, etc.)
 ]
@@ -98,6 +106,11 @@ CLAIM_COLUMNS = [
     "claim_type",
     "is_comparative",
     "likely_needs_substantiation",
+    # Evidence grounding columns (Dec 2025)
+    "timestamp_start_s",
+    "timestamp_end_s",
+    "evidence",
+    "confidence",
 ]
 
 SUPER_COLUMNS = [
@@ -105,7 +118,14 @@ SUPER_COLUMNS = [
     "end_time",
     "text",
     "super_type",
+    # Evidence grounding columns (Dec 2025)
+    "evidence",
+    "confidence",
 ]
+
+# JSONB columns in claims/supers (need Json wrapper for psycopg2)
+CLAIM_JSONB_COLUMNS = {"evidence"}
+SUPER_JSONB_COLUMNS = {"evidence"}
 
 STORYBOARD_COLUMNS = [
     "shot_index",
@@ -213,11 +233,17 @@ JSONB_COLUMNS = {
     "impact_scores",
     "emotional_metrics",
     "effectiveness",
+    # Extraction observability columns
+    "extraction_warnings",
+    "extraction_fill_rate",
+    "extraction_validation",
 }
 
 
 def insert_ad(ad_data: Mapping[str, Any]) -> str:
     """Insert a row into ads and return the generated UUID."""
+    from .schema_check import validate_schema_pg
+
     row = []
     for column in AD_COLUMNS:
         value = ad_data.get(column)
@@ -233,6 +259,9 @@ def insert_ad(ad_data: Mapping[str, Any]) -> str:
     """
 
     with get_connection() as conn, conn.cursor() as cur:
+        # Validate schema has required columns (cached after first call)
+        validate_schema_pg(conn)
+
         cur.execute(query, row)
         inserted = cur.fetchone()
         ad_id = inserted["id"]
@@ -286,10 +315,19 @@ def insert_chunks(ad_id: str, chunks: Iterable[Mapping[str, Any]]) -> Sequence[s
 
 
 def insert_claims(ad_id: str, claims: Iterable[Mapping[str, Any]]) -> Sequence[str]:
-    """Insert ad_claims rows."""
+    """Insert ad_claims rows with evidence grounding."""
+    from .schema_check import validate_table_schema_pg
+
     rows = []
     for claim in claims or []:
-        rows.append([ad_id] + [claim.get(col) for col in CLAIM_COLUMNS])
+        row = [ad_id]
+        for col in CLAIM_COLUMNS:
+            value = claim.get(col)
+            # Wrap JSONB columns with Json adapter
+            if col in CLAIM_JSONB_COLUMNS and value is not None:
+                value = Json(value)
+            row.append(value)
+        rows.append(row)
 
     if not rows:
         return []
@@ -300,15 +338,27 @@ def insert_claims(ad_id: str, claims: Iterable[Mapping[str, Any]]) -> Sequence[s
         RETURNING id
     """
     with get_connection() as conn, conn.cursor() as cur:
+        # Validate schema has required evidence columns (cached after first call)
+        validate_table_schema_pg(conn, "ad_claims")
+
         execute_values(cur, query, rows)
         return [row["id"] for row in cur.fetchall()]
 
 
 def insert_supers(ad_id: str, supers: Iterable[Mapping[str, Any]]) -> Sequence[str]:
-    """Insert ad_supers rows."""
+    """Insert ad_supers rows with evidence grounding."""
+    from .schema_check import validate_table_schema_pg
+
     rows = []
     for sup in supers or []:
-        rows.append([ad_id] + [sup.get(col) for col in SUPER_COLUMNS])
+        row = [ad_id]
+        for col in SUPER_COLUMNS:
+            value = sup.get(col)
+            # Wrap JSONB columns with Json adapter
+            if col in SUPER_JSONB_COLUMNS and value is not None:
+                value = Json(value)
+            row.append(value)
+        rows.append(row)
 
     if not rows:
         return []
@@ -319,6 +369,9 @@ def insert_supers(ad_id: str, supers: Iterable[Mapping[str, Any]]) -> Sequence[s
         RETURNING id
     """
     with get_connection() as conn, conn.cursor() as cur:
+        # Validate schema has required evidence columns (cached after first call)
+        validate_table_schema_pg(conn, "ad_supers")
+
         execute_values(cur, query, rows)
         return [row["id"] for row in cur.fetchall()]
 
@@ -569,4 +622,218 @@ def update_processing_notes(ad_id: str, notes: dict) -> None:
                     )
                 else:
                     logger.warning("Failed to update processing_notes for ad %s: %s", ad_id, e)
+
+
+def update_visual_objects(ad_id: str, visual_objects: dict) -> None:
+    """
+    Update the visual_objects field for an ad.
+    
+    Args:
+        ad_id: UUID of the ad
+        visual_objects: Dictionary containing visual object detection results
+    
+    Note: Gracefully handles the case where the column doesn't exist yet.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "UPDATE ads SET visual_objects = %s WHERE id = %s",
+                    (Json(visual_objects), ad_id)
+                )
+                conn.commit()
+                logger.debug("Updated visual_objects for ad %s", ad_id)
+            except Exception as e:
+                conn.rollback()
+                error_msg = str(e).lower()
+                if "column" in error_msg and "does not exist" in error_msg:
+                    logger.debug(
+                        "visual_objects column not yet added to database. "
+                        "Run migration: ALTER TABLE ads ADD COLUMN visual_objects jsonb DEFAULT '{}'::jsonb;"
+                    )
+                else:
+                    logger.warning("Failed to update visual_objects for ad %s: %s", ad_id, e)
+
+
+def update_video_analytics(
+    ad_id: str,
+    visual_physics: dict,
+    spatial_telemetry: dict,
+    color_psychology: dict,
+) -> None:
+    """
+    Update video analytics fields for an ad.
+    
+    Args:
+        ad_id: UUID of the ad
+        visual_physics: Dict with cuts_per_minute, optical_flow_score, etc.
+        spatial_telemetry: Dict with bounding boxes, screen coverage, etc.
+        color_psychology: Dict with dominant_hex, ratios, contrast, etc.
+    
+    Note: Gracefully handles the case where columns don't exist yet.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    UPDATE ads SET 
+                        visual_physics = %s,
+                        spatial_telemetry = %s,
+                        color_psychology = %s
+                    WHERE id = %s
+                    """,
+                    (Json(visual_physics), Json(spatial_telemetry), Json(color_psychology), ad_id)
+                )
+                conn.commit()
+                logger.debug("Updated video analytics for ad %s", ad_id)
+            except Exception as e:
+                conn.rollback()
+                error_msg = str(e).lower()
+                if "column" in error_msg and "does not exist" in error_msg:
+                    logger.debug(
+                        "Video analytics columns not yet added to database. "
+                        "Run migration to add visual_physics, spatial_telemetry, color_psychology columns."
+                    )
+                else:
+                    logger.warning("Failed to update video analytics for ad %s: %s", ad_id, e)
+
+
+def update_physics_data(ad_id: str, physics_data: dict) -> None:
+    """
+    Update the unified physics_data field for an ad.
+    
+    Args:
+        ad_id: UUID of the ad
+        physics_data: Complete physics extraction result from PhysicsExtractor
+    
+    Note: Gracefully handles the case where column doesn't exist yet.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "UPDATE ads SET physics_data = %s WHERE id = %s",
+                    (Json(physics_data), ad_id)
+                )
+                conn.commit()
+                logger.debug("Updated physics_data for ad %s", ad_id)
+            except Exception as e:
+                conn.rollback()
+                error_msg = str(e).lower()
+                if "column" in error_msg and "does not exist" in error_msg:
+                    logger.debug(
+                        "physics_data column not yet added to database. "
+                        "Run migration: ALTER TABLE ads ADD COLUMN physics_data jsonb DEFAULT '{}'::jsonb;"
+                    )
+                else:
+                    logger.warning("Failed to update physics_data for ad %s: %s", ad_id, e)
+
+
+def update_toxicity_report(ad_id: str, toxicity_report: dict) -> None:
+    """
+    Update toxicity fields for an ad.
+
+    Persists both:
+    - Explicit columns for filtering (toxicity_total, toxicity_risk_level, etc.)
+    - Full toxicity_report JSONB for detailed analysis
+
+    Args:
+        ad_id: UUID of the ad
+        toxicity_report: Complete toxicity scoring report from ToxicityScorer
+
+    Note: Gracefully handles the case where columns don't exist yet.
+    """
+    # Extract explicit column values from the report
+    toxicity_total = toxicity_report.get("toxic_score")
+    toxicity_risk_level = toxicity_report.get("risk_level")
+
+    # Extract dark pattern labels
+    dark_patterns = toxicity_report.get("dark_patterns_detected", [])
+    # Get unique category labels from breakdown
+    breakdown = toxicity_report.get("breakdown", {})
+    toxicity_labels = []
+    for category in ["physiological", "psychological", "regulatory"]:
+        cat_data = breakdown.get(category, {})
+        for flag in cat_data.get("flags", []):
+            # Extract category from flag text (e.g., "False Scarcity Detected" -> "false_scarcity")
+            if "Detected" in flag:
+                label = flag.split(" Detected")[0].lower().replace(" ", "_")
+                if label not in toxicity_labels:
+                    toxicity_labels.append(label)
+    # Also add dark pattern categories
+    for pattern in dark_patterns:
+        if pattern and pattern not in toxicity_labels:
+            toxicity_labels.append(pattern)
+
+    # Extract subscores
+    toxicity_subscores = {
+        "physiological": breakdown.get("physiological", {}),
+        "psychological": breakdown.get("psychological", {}),
+        "regulatory": breakdown.get("regulatory", {}),
+    }
+
+    # Determine version (check if AI was used)
+    metadata = toxicity_report.get("metadata", {})
+    ai_enabled = metadata.get("ai_enabled", False)
+    toxicity_version = "1.1.0-ai" if ai_enabled else "1.0.0"
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                # Try to update all columns (new schema)
+                cur.execute(
+                    """
+                    UPDATE ads SET
+                        toxicity_total = %s,
+                        toxicity_risk_level = %s,
+                        toxicity_labels = %s,
+                        toxicity_subscores = %s,
+                        toxicity_version = %s,
+                        toxicity_report = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        toxicity_total,
+                        toxicity_risk_level,
+                        Json(toxicity_labels),
+                        Json(toxicity_subscores),
+                        toxicity_version,
+                        Json(toxicity_report),
+                        ad_id
+                    )
+                )
+                conn.commit()
+                logger.debug(
+                    "Updated toxicity for ad %s (score: %s, risk: %s, version: %s)",
+                    ad_id, toxicity_total, toxicity_risk_level, toxicity_version
+                )
+            except Exception as e:
+                conn.rollback()
+                error_msg = str(e).lower()
+
+                # Check if it's a missing column error
+                if "column" in error_msg and "does not exist" in error_msg:
+                    # Fallback: try updating just toxicity_report (old schema)
+                    try:
+                        with conn.cursor() as cur2:
+                            cur2.execute(
+                                "UPDATE ads SET toxicity_report = %s WHERE id = %s",
+                                (Json(toxicity_report), ad_id)
+                            )
+                            conn.commit()
+                            logger.debug(
+                                "Updated toxicity_report (legacy) for ad %s. "
+                                "Run schema_toxicity_columns.sql for full support.",
+                                ad_id
+                            )
+                    except Exception as e2:
+                        conn.rollback()
+                        logger.warning(
+                            "Failed to update toxicity for ad %s. "
+                            "Run migration: tvads_rag/schema_toxicity_columns.sql. Error: %s",
+                            ad_id, str(e2)[:100]
+                        )
+                else:
+                    logger.warning("Failed to update toxicity for ad %s: %s", ad_id, str(e)[:100])
 

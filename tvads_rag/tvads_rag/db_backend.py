@@ -138,6 +138,26 @@ def update_processing_notes(ad_id, notes):
     return _get_impl().update_processing_notes(ad_id, notes)
 
 
+def update_visual_objects(ad_id, visual_objects):
+    """Update visual_objects field for an ad (object detection results)."""
+    return _get_impl().update_visual_objects(ad_id, visual_objects)
+
+
+def update_video_analytics(ad_id, visual_physics, spatial_telemetry, color_psychology):
+    """Update video analytics fields for an ad (visual physics, spatial, color)."""
+    return _get_impl().update_video_analytics(ad_id, visual_physics, spatial_telemetry, color_psychology)
+
+
+def update_physics_data(ad_id, physics_data):
+    """Update unified physics_data field for an ad (from PhysicsExtractor)."""
+    return _get_impl().update_physics_data(ad_id, physics_data)
+
+
+def update_toxicity_report(ad_id, toxicity_report):
+    """Update toxicity_report field for an ad (toxicity scoring results)."""
+    return _get_impl().update_toxicity_report(ad_id, toxicity_report)
+
+
 __all__ = [
     "get_connection",
     "ad_exists",
@@ -152,6 +172,10 @@ __all__ = [
     "find_incomplete_ads",
     "delete_ad",
     "update_processing_notes",
+    "update_visual_objects",
+    "update_video_analytics",
+    "update_physics_data",
+    "update_toxicity_report",
 ]
 
 

@@ -28,6 +28,24 @@ Repairs ads that are missing storyboard analysis. Runs vision pipeline on incomp
 ### `verify_completeness.py`
 Verifies that all ads have complete data (embeddings, storyboards, extraction v2.0, etc.).
 
+### `backfill_video_urls.py`
+Backfills the `video_url` column in the `ads` table from CSV metadata. Matches ads by `external_id` (with fallbacks to `record_id` and `movie_filename`).
+
+**Usage:**
+```bash
+# Dry run to see what would be updated
+python scripts/backfill_video_urls.py --csv "TELLY+ADS (2).csv" --dry-run
+
+# Update only ads missing video_url
+python scripts/backfill_video_urls.py --csv "TELLY+ADS (2).csv" --only-missing
+
+# Update all ads (overwrites existing video_url)
+python scripts/backfill_video_urls.py --csv "TELLY+ADS (2).csv"
+
+# Test with limited number of ads
+python scripts/backfill_video_urls.py --csv "TELLY+ADS (2).csv" --limit 10 --dry-run
+```
+
 ## Usage
 
 Run scripts from the project root:

@@ -23,3 +23,7 @@ export interface AdDetail {
     image_url?: string;
 }
 
+
+
+
+

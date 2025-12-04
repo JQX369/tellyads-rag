@@ -32,3 +32,7 @@ Once the root directory is set, Vercel will automatically:
 
 The push I just made should trigger a new deployment once the root directory is configured correctly.
 
+
+
+
+

@@ -53,3 +53,7 @@ def get_image_url_from_csv(external_id: str) -> Optional[str]:
     data = parser.get_ad_data(external_id)
     return data.get("image_url") if data else None
 
+
+
+
+

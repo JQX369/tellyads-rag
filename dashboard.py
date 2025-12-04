@@ -394,11 +394,12 @@ with tab_browser:
                 from tvads_rag.tvads_rag.supabase_db import _get_client
                 client = _get_client()
                 
-                # Load ad with JSONB fields
+                # Load ad with JSONB fields (including new analytics fields)
                 ad_resp = client.table("ads").select(
                     "id, analysis_json, impact_scores, emotional_metrics, effectiveness, "
                     "cta_offer, brand_asset_timeline, audio_fingerprint, creative_dna, claims_compliance, "
-                    "performance_metrics"
+                    "performance_metrics, visual_objects, physics_data, toxicity_report, "
+                    "color_psychology, spatial_telemetry, visual_physics"
                 ).eq("id", ad_id).execute()
                 
                 if not ad_resp.data:
@@ -413,7 +414,8 @@ with tab_browser:
                         SELECT 
                             id, analysis_json, impact_scores, emotional_metrics, effectiveness,
                             cta_offer, brand_asset_timeline, audio_fingerprint, creative_dna, claims_compliance,
-                            performance_metrics
+                            performance_metrics, visual_objects, physics_data, toxicity_report,
+                            color_psychology, spatial_telemetry, visual_physics
                         FROM ads 
                         WHERE id = %s
                     """, (ad_id,))
@@ -789,7 +791,8 @@ with tab_browser:
                 # Extraction v2.0 grouped tabs
                 detail_tabs = st.tabs([
                     "📊 Overview", "⚡ Impact Scores", "💓 Emotional", "🎨 Creative DNA",
-                    "🏷️ Brand & Characters", "🎬 Audio & Visual", "⚠️ Compliance & Effectiveness"
+                    "🏷️ Brand & Characters", "🎬 Audio & Visual", "🔬 Physics & Analytics",
+                    "⚠️ Compliance & Effectiveness"
                 ])
                 
                 with detail_tabs[0]:  # Overview - core_metadata, campaign_strategy, creative_attributes
@@ -1407,7 +1410,196 @@ with tab_browser:
                         with st.expander("Full Audio JSON"):
                             st.json(audio or {})
                 
-                with detail_tabs[6]:  # Compliance & Effectiveness - compliance_assessment, effectiveness_drivers, competitive_context
+                with detail_tabs[6]:  # Physics & Analytics - physics_data, visual_objects, color_psychology, spatial_telemetry
+                    # Load new analytics fields
+                    physics_data = full_ad_data.get("physics_data") or ad.get("physics_data") or {}
+                    visual_objects = full_ad_data.get("visual_objects") or ad.get("visual_objects") or {}
+                    color_psychology = full_ad_data.get("color_psychology") or ad.get("color_psychology") or {}
+                    spatial_telemetry = full_ad_data.get("spatial_telemetry") or ad.get("spatial_telemetry") or {}
+                    visual_physics = full_ad_data.get("visual_physics") or ad.get("visual_physics") or {}
+                    
+                    # Parse JSON strings if needed
+                    for field_name, field_data in [
+                        ("physics_data", physics_data),
+                        ("visual_objects", visual_objects),
+                        ("color_psychology", color_psychology),
+                        ("spatial_telemetry", spatial_telemetry),
+                        ("visual_physics", visual_physics),
+                    ]:
+                        if isinstance(field_data, str):
+                            try:
+                                if field_name == "physics_data":
+                                    physics_data = json.loads(field_data)
+                                elif field_name == "visual_objects":
+                                    visual_objects = json.loads(field_data)
+                                elif field_name == "color_psychology":
+                                    color_psychology = json.loads(field_data)
+                                elif field_name == "spatial_telemetry":
+                                    spatial_telemetry = json.loads(field_data)
+                                elif field_name == "visual_physics":
+                                    visual_physics = json.loads(field_data)
+                            except:
+                                pass
+                    
+                    # Visual Physics Section
+                    if visual_physics and isinstance(visual_physics, dict):
+                        st.markdown("### 🎬 Visual Physics")
+                        vp_cols = st.columns(4)
+                        vp_cols[0].metric("Cuts/Min", f"{visual_physics.get('cuts_per_minute', 0):.1f}")
+                        vp_cols[1].metric("Avg Shot Duration", f"{visual_physics.get('average_shot_duration_s', 0):.2f}s")
+                        vp_cols[2].metric("Motion Energy", f"{visual_physics.get('optical_flow_score', 0):.2f}")
+                        vp_cols[3].metric("Brightness Variance", f"{visual_physics.get('brightness_variance', 0):.2f}")
+                        
+                        if visual_physics.get("motion_vector_direction"):
+                            st.caption(f"Motion Direction: {visual_physics.get('motion_vector_direction', 'N/A')}")
+                        
+                        st.divider()
+                    
+                    # Physics Data (from Physics Engine)
+                    if physics_data and isinstance(physics_data, dict):
+                        st.markdown("### ⚙️ Physics Engine Data")
+                        
+                        physics_version = physics_data.get("physics_version", "N/A")
+                        st.caption(f"Physics Engine v{physics_version}")
+                        
+                        # Visual Physics from engine
+                        vp_engine = physics_data.get("visual_physics", {})
+                        if vp_engine:
+                            st.markdown("**Visual Metrics:**")
+                            vp_eng_cols = st.columns(4)
+                            vp_eng_cols[0].metric("Cuts/Min", f"{vp_engine.get('cuts_per_minute', 0):.1f}")
+                            vp_eng_cols[1].metric("Motion Score", f"{vp_engine.get('optical_flow_score', 0):.2f}")
+                            vp_eng_cols[2].metric("Brightness Var", f"{vp_engine.get('brightness_variance', 0):.2f}")
+                            vp_eng_cols[3].metric("Scenes Detected", len(vp_engine.get("scenes", [])))
+                        
+                        # Audio Physics
+                        audio_physics = physics_data.get("audio_physics", {})
+                        if audio_physics:
+                            st.markdown("**Audio Metrics:**")
+                            ap_cols = st.columns(3)
+                            if audio_physics.get("loudness_lu") is not None:
+                                ap_cols[0].metric("Loudness (LUFS)", f"{audio_physics.get('loudness_lu', 0):.1f}")
+                            if audio_physics.get("bpm") is not None:
+                                ap_cols[1].metric("BPM", f"{audio_physics.get('bpm', 0):.0f}")
+                            if audio_physics.get("tempo") is not None:
+                                ap_cols[2].metric("Tempo", f"{audio_physics.get('tempo', 0):.0f}")
+                        
+                        # Objects Detected
+                        objects = physics_data.get("objects_detected", [])
+                        if objects:
+                            st.markdown("**🔍 Objects Detected (YOLO):**")
+                            obj_list = []
+                            for obj in objects[:10]:  # Show top 10
+                                if isinstance(obj, dict):
+                                    obj_name = obj.get("class", obj.get("name", "Unknown"))
+                                    conf = obj.get("confidence", 0)
+                                    obj_list.append(f"{obj_name} ({conf:.0%})")
+                            if obj_list:
+                                st.write(" | ".join(obj_list))
+                        
+                        # Spatial Data
+                        spatial = physics_data.get("spatial_data", {})
+                        if spatial:
+                            st.markdown("**📍 Spatial Data:**")
+                            if spatial.get("largest_object_bbox"):
+                                bbox = spatial.get("largest_object_bbox", {})
+                                st.caption(f"Largest Object: x={bbox.get('x', 0):.2f}, y={bbox.get('y', 0):.2f}, w={bbox.get('w', 0):.2f}, h={bbox.get('h', 0):.2f}")
+                        
+                        # Keyframes
+                        keyframes = physics_data.get("keyframes_saved", [])
+                        if keyframes:
+                            st.markdown(f"**🖼️ Keyframes:** {len(keyframes)} extracted")
+                            if isinstance(keyframes, list) and len(keyframes) > 0:
+                                if isinstance(keyframes[0], str) and keyframes[0].startswith("http"):
+                                    st.caption("Keyframes uploaded to S3")
+                                    for i, url in enumerate(keyframes[:5]):  # Show first 5 URLs
+                                        st.markdown(f"- [Frame {i}]({url})")
+                        
+                        st.divider()
+                    
+                    # Visual Objects (from Gemini Vision)
+                    if visual_objects and isinstance(visual_objects, dict):
+                        st.markdown("### 👁️ Visual Objects Detection")
+                        
+                        agg = visual_objects.get("aggregate_summary", {})
+                        if agg:
+                            vo_cols = st.columns(4)
+                            vo_cols[0].metric("Products", len(agg.get("unique_products", [])))
+                            vo_cols[1].metric("Logos", len(agg.get("unique_logos", [])))
+                            vo_cols[2].metric("Text Items", len(agg.get("all_text_ocr", [])))
+                            vo_cols[3].metric("People", len(agg.get("people_detected", [])))
+                            
+                            if agg.get("unique_products"):
+                                st.markdown("**Products:** " + ", ".join(agg.get("unique_products", [])[:10]))
+                            if agg.get("unique_logos"):
+                                st.markdown("**Logos:** " + ", ".join(agg.get("unique_logos", [])[:10]))
+                        
+                        st.divider()
+                    
+                    # Color Psychology
+                    if color_psychology and isinstance(color_psychology, dict):
+                        st.markdown("### 🎨 Color Psychology")
+                        
+                        dominant_hex = color_psychology.get("dominant_hex", [])
+                        ratios = color_psychology.get("ratios", [])
+                        contrast = color_psychology.get("contrast_ratio")
+                        saturation = color_psychology.get("saturation_mean")
+                        
+                        dominant_colors = []
+                        for i, hex_code in enumerate(dominant_hex[:3]):
+                            ratio = ratios[i] if i < len(ratios) else 0
+                            dominant_colors.append(f"{hex_code} ({ratio:.0%})")
+                        
+                        if dominant_colors:
+                            st.markdown("**Dominant Colors:** " + " | ".join(dominant_colors))
+                        
+                        cp_cols = st.columns(2)
+                        if contrast is not None:
+                            cp_cols[0].metric("Contrast Ratio", f"{contrast:.1f}")
+                        if saturation is not None:
+                            cp_cols[1].metric("Saturation", f"{saturation:.2f}")
+                        
+                        st.divider()
+                    
+                    # Spatial Telemetry
+                    if spatial_telemetry and isinstance(spatial_telemetry, dict):
+                        st.markdown("### 📐 Spatial Telemetry")
+                        
+                        brand_prom = spatial_telemetry.get("brand_prominence", {})
+                        if brand_prom:
+                            st.markdown("**Brand Prominence:**")
+                            sp_cols = st.columns(2)
+                            sp_cols[0].metric("Screen Coverage", f"{(brand_prom.get('total_screen_coverage_pct', 0) * 100):.1f}%")
+                            sp_cols[1].metric("Center Distance", f"{brand_prom.get('center_gravity_dist', 0):.2f}")
+                        
+                        face_prom = spatial_telemetry.get("face_prominence", {})
+                        if face_prom:
+                            st.markdown("**Face Prominence:**")
+                            fp_cols = st.columns(2)
+                            fp_cols[0].metric("Max Face Size", f"{(face_prom.get('max_face_size_pct', 0) * 100):.1f}%")
+                            fp_cols[1].metric("Eye Contact", f"{face_prom.get('eye_contact_duration_s', 0):.1f}s")
+                        
+                        st.divider()
+                    
+                    # Summary
+                    has_data = any([
+                        visual_physics, physics_data, visual_objects,
+                        color_psychology, spatial_telemetry
+                    ])
+                    
+                    if not has_data:
+                        st.info("No physics/analytics data available - physics extraction may not have run")
+                    else:
+                        with st.expander("Full Physics & Analytics JSON"):
+                            st.json({
+                                "visual_physics": visual_physics,
+                                "physics_data": physics_data,
+                                "visual_objects": visual_objects,
+                                "color_psychology": color_psychology,
+                                "spatial_telemetry": spatial_telemetry,
+                            })
+                
+                with detail_tabs[7]:  # Compliance & Effectiveness - compliance_assessment, effectiveness_drivers, competitive_context, toxicity_report
                     # Use lazy-loaded data
                     compliance = full_ad_data.get("claims_compliance") or ad.get("claims_compliance") or (analysis.get("compliance_assessment") if analysis else None)
                     if isinstance(compliance, str):
@@ -1565,6 +1757,80 @@ with tab_browser:
                         broken = competitive.get("category_conventions_broken") or []
                         if broken:
                             st.markdown(f"**Conventions Broken:** {', '.join(broken)}")
+                    
+                    # Toxicity Report Section
+                    toxicity_report = full_ad_data.get("toxicity_report") or ad.get("toxicity_report") or {}
+                    if isinstance(toxicity_report, str):
+                        try:
+                            toxicity_report = json.loads(toxicity_report)
+                        except:
+                            pass
+                    
+                    if toxicity_report and isinstance(toxicity_report, dict) and toxicity_report.get("toxic_score") is not None:
+                        st.divider()
+                        st.markdown("### ⚠️ Toxicity Score")
+                        
+                        toxic_score = toxicity_report.get("toxic_score", 0)
+                        risk_level = toxicity_report.get("risk_level", "UNKNOWN")
+                        
+                        # Color code by risk level
+                        risk_colors = {
+                            "LOW": "🟢",
+                            "MEDIUM": "🟡",
+                            "HIGH": "🔴",
+                            "CRITICAL": "🚨"
+                        }
+                        risk_icon = risk_colors.get(risk_level.upper(), "⚪")
+                        
+                        tox_cols = st.columns(3)
+                        tox_cols[0].metric("Toxicity Score", f"{risk_icon} {toxic_score}/100")
+                        tox_cols[1].metric("Risk Level", risk_level.upper())
+                        
+                        # Breakdown by pillar
+                        breakdown = toxicity_report.get("breakdown", {})
+                        if breakdown:
+                            phys_score = breakdown.get("physiological", {}).get("score", 0)
+                            psych_score = breakdown.get("psychological", {}).get("score", 0)
+                            reg_score = breakdown.get("regulatory", {}).get("score", 0)
+                            
+                            st.markdown("**Breakdown by Pillar:**")
+                            br_cols = st.columns(3)
+                            br_cols[0].metric("Physiological", f"{phys_score}/100", delta="40% weight")
+                            br_cols[1].metric("Psychological", f"{psych_score}/100", delta="40% weight")
+                            br_cols[2].metric("Regulatory", f"{reg_score}/100", delta="20% weight")
+                            
+                            # Flags
+                            all_flags = []
+                            for pillar_name, pillar_data in breakdown.items():
+                                if isinstance(pillar_data, dict):
+                                    flags = pillar_data.get("flags", [])
+                                    if flags:
+                                        all_flags.extend([f"{pillar_name.title()}: {f}" for f in flags])
+                            
+                            if all_flags:
+                                st.markdown("**🚩 Flags:**")
+                                for flag in all_flags[:10]:  # Show top 10
+                                    st.caption(f"- {flag}")
+                            
+                            # Dark patterns
+                            dark_patterns = toxicity_report.get("dark_patterns_detected", [])
+                            if dark_patterns:
+                                st.markdown("**🕳️ Dark Patterns Detected:**")
+                                for pattern in dark_patterns[:5]:
+                                    st.caption(f"- {pattern}")
+                        
+                        # Recommendation
+                        recommendation = toxicity_report.get("recommendation", "")
+                        if recommendation:
+                            if risk_level.upper() in ["HIGH", "CRITICAL"]:
+                                st.error(f"**Recommendation:** {recommendation}")
+                            elif risk_level.upper() == "MEDIUM":
+                                st.warning(f"**Recommendation:** {recommendation}")
+                            else:
+                                st.info(f"**Recommendation:** {recommendation}")
+                        
+                        with st.expander("Full Toxicity Report JSON"):
+                            st.json(toxicity_report)
                     
                     # Hero Analysis (if present)
                     hero = full_ad_data.get("hero_analysis") or ad.get("hero_analysis")

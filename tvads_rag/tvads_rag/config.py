@@ -86,6 +86,25 @@ class VisionConfig:
     frame_sample_seconds: float
 
 
+@dataclass(frozen=True)
+class VideoAnalyticsConfig:
+    """Configuration for video analytics (visual physics, spatial, color)."""
+
+    enabled: bool
+    yolo_model: str  # yolov8n.pt (nano), yolov8s.pt (small), yolov8m.pt (medium)
+    optical_flow_sample_rate: int  # Sample every Nth frame for optical flow
+    color_clusters: int  # Number of dominant colors to extract
+
+
+@dataclass(frozen=True)
+class ToxicityConfig:
+    """Configuration for AI-enhanced toxicity scoring."""
+
+    ai_enabled: bool  # Whether to use Gemini for dark pattern detection
+    model_name: str  # Gemini model to use (defaults to fast tier)
+    api_key: Optional[str]  # Google API key (reuses GOOGLE_API_KEY)
+
+
 def _get_env(name: str, default: Optional[str] = None) -> Optional[str]:
     """Wrapper around os.getenv that trims whitespace."""
     value = os.getenv(name, default)
@@ -317,6 +336,83 @@ def is_rerank_enabled(config: Optional[RerankConfig] = None) -> bool:
     return cfg.provider != "none"
 
 
+@lru_cache(maxsize=1)
+def get_video_analytics_config() -> VideoAnalyticsConfig:
+    """Return configuration for video analytics (visual physics, spatial, color)."""
+    enabled_str = (_get_env("VIDEO_ANALYTICS_ENABLED") or "true").lower()
+    enabled = enabled_str in ("true", "1", "yes", "on")
+    
+    yolo_model = _get_env("YOLO_MODEL") or "yolov8n.pt"
+    
+    # Validate YOLO model name
+    valid_models = {"yolov8n.pt", "yolov8s.pt", "yolov8m.pt", "yolov8l.pt", "yolov8x.pt"}
+    if yolo_model not in valid_models:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"YOLO_MODEL '{yolo_model}' is not a standard model. Valid models: {sorted(valid_models)}"
+        )
+    
+    optical_flow_rate_str = _get_env("OPTICAL_FLOW_SAMPLE_RATE") or "5"
+    try:
+        optical_flow_sample_rate = int(optical_flow_rate_str)
+    except ValueError:
+        optical_flow_sample_rate = 5
+    
+    color_clusters_str = _get_env("COLOR_CLUSTERS") or "5"
+    try:
+        color_clusters = int(color_clusters_str)
+    except ValueError:
+        color_clusters = 5
+    
+    return VideoAnalyticsConfig(
+        enabled=enabled,
+        yolo_model=yolo_model,
+        optical_flow_sample_rate=max(1, optical_flow_sample_rate),
+        color_clusters=max(2, min(10, color_clusters)),  # Clamp between 2-10
+    )
+
+
+def is_video_analytics_enabled(config: Optional[VideoAnalyticsConfig] = None) -> bool:
+    """Return True when video analytics is enabled."""
+    cfg = config or get_video_analytics_config()
+    return cfg.enabled
+
+
+@lru_cache(maxsize=1)
+def get_toxicity_config() -> ToxicityConfig:
+    """Return configuration for AI-enhanced toxicity scoring."""
+    # Check if AI-enhanced toxicity scoring is enabled
+    ai_enabled_str = (_get_env("TOXICITY_AI_ENABLED") or "true").lower()
+    ai_enabled = ai_enabled_str in ("true", "1", "yes", "on")
+    
+    # Use Gemini 2.5 Flash (fast tier) for toxicity analysis
+    model_name = _get_env("TOXICITY_MODEL") or DEFAULT_VISION_FAST_MODEL
+    
+    # Reuse GOOGLE_API_KEY
+    api_key = _get_env("GOOGLE_API_KEY")
+    
+    # If AI is enabled but no API key, disable AI and warn
+    if ai_enabled and not api_key:
+        import logging
+        logging.getLogger(__name__).warning(
+            "TOXICITY_AI_ENABLED=true but GOOGLE_API_KEY not set. "
+            "Falling back to regex-only dark pattern detection."
+        )
+        ai_enabled = False
+    
+    return ToxicityConfig(
+        ai_enabled=ai_enabled,
+        model_name=model_name,
+        api_key=api_key,
+    )
+
+
+def is_toxicity_ai_enabled(config: Optional[ToxicityConfig] = None) -> bool:
+    """Return True when AI-enhanced toxicity scoring is enabled."""
+    cfg = config or get_toxicity_config()
+    return cfg.ai_enabled and cfg.api_key is not None
+
+
 def describe_active_models() -> dict:
     """Return a summary of the currently selected providers/models."""
     openai_cfg = get_openai_config()
@@ -349,6 +445,8 @@ __all__ = [
     "StorageConfig",
     "PipelineConfig",
     "VisionConfig",
+    "VideoAnalyticsConfig",
+    "ToxicityConfig",
     "resolve_vision_model",
     "get_db_config",
     "get_openai_config",
@@ -356,8 +454,12 @@ __all__ = [
     "get_storage_config",
     "get_pipeline_config",
     "get_vision_config",
+    "get_video_analytics_config",
+    "get_toxicity_config",
     "is_vision_enabled",
     "is_rerank_enabled",
+    "is_video_analytics_enabled",
+    "is_toxicity_ai_enabled",
     "describe_active_models",
 ]
 

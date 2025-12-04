@@ -1,0 +1,15 @@
+{
+  "timestamp": "20251204_175709",
+  "input_file": "TELLY+ADS (2).csv",
+  "dry_run": true,
+  "force_overwrite": false,
+  "total_records": 21460,
+  "matched_count": 90,
+  "unmatched_count": 21370,
+  "conflicts_count": 0,
+  "inserted_count": 0,
+  "updated_count": 0,
+  "skipped_count": 0,
+  "error_count": 0,
+  "match_rate": 0.4193849021435228
+}

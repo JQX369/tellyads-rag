@@ -58,6 +58,14 @@ CREATE TABLE IF NOT EXISTS ads (
     effectiveness jsonb,         -- effectiveness_drivers, memorability, competitive_context
     extraction_version text DEFAULT '1.0',  -- Track which extraction schema was used
     processing_notes jsonb,      -- Track any issues during ingestion (safety blocks, timeouts, etc.)
+    -- Visual object detection (Nov 2025)
+    visual_objects jsonb DEFAULT '{}'::jsonb,  -- Products, logos, text/OCR, people, settings detected in frames
+    -- Video analytics (Nov 2025)
+    visual_physics jsonb DEFAULT '{}'::jsonb,  -- cuts_per_minute, optical_flow, brightness_variance
+    spatial_telemetry jsonb DEFAULT '{}'::jsonb,  -- bounding boxes, screen coverage, face prominence
+    color_psychology jsonb DEFAULT '{}'::jsonb,  -- dominant hex codes, ratios, contrast, temperature
+    -- Physics Engine (Nov 2025) - unified physics extraction
+    physics_data jsonb DEFAULT '{}'::jsonb,  -- Complete output from PhysicsExtractor (scene detection, audio, objects)
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
@@ -154,6 +162,44 @@ BEGIN
         WHERE table_name = 'ads' AND column_name = 'processing_notes'
     ) THEN
         ALTER TABLE ads ADD COLUMN processing_notes jsonb;
+    END IF;
+
+    -- Visual object detection column (Nov 2025)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'ads' AND column_name = 'visual_objects'
+    ) THEN
+        ALTER TABLE ads ADD COLUMN visual_objects jsonb DEFAULT '{}'::jsonb;
+    END IF;
+
+    -- Video analytics columns (Nov 2025)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'ads' AND column_name = 'visual_physics'
+    ) THEN
+        ALTER TABLE ads ADD COLUMN visual_physics jsonb DEFAULT '{}'::jsonb;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'ads' AND column_name = 'spatial_telemetry'
+    ) THEN
+        ALTER TABLE ads ADD COLUMN spatial_telemetry jsonb DEFAULT '{}'::jsonb;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'ads' AND column_name = 'color_psychology'
+    ) THEN
+        ALTER TABLE ads ADD COLUMN color_psychology jsonb DEFAULT '{}'::jsonb;
+    END IF;
+
+    -- Physics Engine column (Nov 2025)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'ads' AND column_name = 'physics_data'
+    ) THEN
+        ALTER TABLE ads ADD COLUMN physics_data jsonb DEFAULT '{}'::jsonb;
     END IF;
 END;
 $$;
@@ -290,7 +336,14 @@ CREATE OR REPLACE FUNCTION match_embedding_items_hybrid(
         'memorable_elements',
         'emotional_peaks',
         'distinctive_assets',
-        'effectiveness_insight'
+        'effectiveness_insight',
+        'visual_objects',
+        'visual_ocr',
+        'visual_scene',
+        'brand_visual',
+        'brand_assets',
+        'visual_physics',
+        'color_palette'
     ]
 )
 RETURNS TABLE (
@@ -332,7 +385,14 @@ WITH params AS (
                 'memorable_elements',
                 'emotional_peaks',
                 'distinctive_assets',
-                'effectiveness_insight'
+                'effectiveness_insight',
+                'visual_objects',
+                'visual_ocr',
+                'visual_scene',
+                'brand_visual',
+                'brand_assets',
+                'visual_physics',
+                'color_palette'
             ]
             ELSE item_types
         END AS q_types

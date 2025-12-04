@@ -1,11 +1,30 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { defaultMetadata } from "@/lib/seo";
+import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
 
-export const metadata: Metadata = defaultMetadata;
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  ...defaultMetadata,
+  title: {
+    default: "TellyAds — Every Ad Ever Aired",
+    template: "%s | TellyAds",
+  },
+  description: "The definitive archive of television advertising. Explore decades of commercials, discover iconic campaigns, and research advertising history.",
+};
 
 export default function RootLayout({
   children,
@@ -14,8 +33,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans antialiased min-h-screen bg-background text-foreground selection:bg-primary selection:text-white`}>
-        {children}
+      <body
+        className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} font-display antialiased min-h-screen bg-void text-signal`}
+      >
+        <SmoothScrollProvider>
+          <div className="film-grain">
+            {children}
+          </div>
+        </SmoothScrollProvider>
       </body>
     </html>
   );

@@ -205,9 +205,46 @@ def _parse_frame_rate(rate_str: Optional[str]) -> Optional[float]:
         return None
 
 
+def normalize_ad_duration(duration: float, tolerance: float = 0.5) -> float:
+    """
+    Round duration to standard TV ad lengths (15s, 30s, 45s, 60s, 90s, 120s).
+    
+    TV ads are typically exactly 15s, 30s, 60s, etc., but video encoding can introduce
+    small variations (e.g., 29.97s, 30.03s). This function rounds to the nearest
+    standard length if within tolerance.
+    
+    Args:
+        duration: Raw duration from video file
+        tolerance: Maximum deviation from standard length to round (default 0.5s)
+    
+    Returns:
+        Normalized duration (standard length if within tolerance, otherwise original)
+    """
+    if duration <= 0:
+        return duration
+    
+    # Standard TV ad lengths (in seconds)
+    standard_lengths = [15, 30, 45, 60, 90, 120, 180]
+    
+    # Find nearest standard length
+    for standard in standard_lengths:
+        if abs(duration - standard) <= tolerance:
+            logger.debug(
+                "Normalizing duration %.2fs -> %ds (within %.1fs tolerance)",
+                duration, standard, tolerance
+            )
+            return float(standard)
+    
+    # If no standard length matches, return original (might be non-standard like 10s, 20s)
+    return duration
+
+
 def probe_media(path: str) -> dict:
     """
     Use ffprobe to extract duration, resolution, fps, and aspect ratio metadata.
+    
+    Duration is normalized to standard TV ad lengths (15s, 30s, 60s, etc.)
+    if within 0.5s tolerance.
     """
     _ensure_binary_exists("ffprobe")
     cmd = [
@@ -225,7 +262,9 @@ def probe_media(path: str) -> dict:
         cmd, capture_output=True, text=True, check=True  # noqa: S603,S607
     )
     info = json.loads(result.stdout)
-    duration = float(info["format"].get("duration", 0.0))
+    raw_duration = float(info["format"].get("duration", 0.0))
+    duration = normalize_ad_duration(raw_duration)
+    
     video_stream = next(
         (stream for stream in info.get("streams", []) if stream.get("codec_type") == "video"),
         {},
@@ -285,6 +324,7 @@ __all__ = [
     "s3_object_exists",
     "download_s3_object_to_tempfile",
     "probe_media",
+    "normalize_ad_duration",
     "extract_audio",
 ]
 

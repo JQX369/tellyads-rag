@@ -27,6 +27,84 @@ logger = logging.getLogger(__name__)
 MAX_GEMINI_FRAMES = 24
 
 
+# ---------------------------------------------------------------------------
+# Object Detection Prompt - Enhanced Gemini Vision for detailed object/logo/text detection
+# ---------------------------------------------------------------------------
+
+OBJECT_DETECTION_PROMPT = """You are an expert visual analyst specializing in advertising content. Analyze these video frames and detect ALL objects, logos, text, and people visible throughout the ad.
+
+## Detection Categories
+
+1. **Products**: Brand products, packaging, items being advertised, hero products
+2. **Logos**: Brand logos, corporate marks, app icons, watermarks
+3. **Text/OCR**: ALL on-screen text including:
+   - Supers (promotional text overlays)
+   - URLs and website addresses
+   - Phone numbers
+   - Legal/disclaimer text
+   - Prices and offers
+   - Hashtags and social handles
+   - Product names and taglines
+4. **People**: Count visible people, note demographics (age range, gender presentation)
+5. **Vehicles**: Cars, bikes, planes, boats (with make/model if identifiable)
+6. **Food/Beverage**: Specific items visible (e.g., "Coca-Cola can", "pizza slice")
+7. **Technology**: Phones, laptops, tablets, TVs, smart devices, app screens
+8. **Animals**: Any animals or mascots
+9. **Locations/Settings**: Scene type, indoor/outdoor, specific setting details
+
+## Analysis Instructions
+
+- Analyze EACH frame provided and note what appears in it
+- Track when objects appear and disappear across frames
+- Note object prominence: is it the hero/focus or background element?
+- Capture ALL text exactly as written (OCR everything visible)
+- Identify brand-specific distinctive assets (mascots, characters, colors)
+- Note any celebrity or recognizable faces
+
+## Output Format
+
+Return STRICT JSON (no markdown fences):
+{
+  "detected_objects": [
+    {
+      "frame_index": <int - which frame>,
+      "timestamp_s": <float - timestamp of frame>,
+      "objects": [
+        {
+          "category": "<product|logo|text|person|vehicle|food_beverage|technology|animal|location|other>",
+          "label": "<specific name, e.g., 'iPhone 15 Pro', 'Nike swoosh logo'>",
+          "content": "<for text category: exact text content>",
+          "confidence": <0.0-1.0>,
+          "prominence": "<hero|prominent|supporting|background>",
+          "position": "<center|left|right|top|bottom|full_screen|corner>",
+          "details": "<additional details if relevant>"
+        }
+      ]
+    }
+  ],
+  "aggregate_summary": {
+    "unique_products": ["<list of distinct products seen>"],
+    "unique_logos": ["<list of distinct logos/brand marks seen>"],
+    "all_text_ocr": ["<list of ALL text captured across frames>"],
+    "people_count_max": <int - maximum number of people visible in any frame>,
+    "people_demographics": "<brief description of people visible, e.g., 'young adults 20s-30s, mixed gender'>",
+    "primary_setting": "<main location/setting type>",
+    "scene_types": ["<list of distinct scene types/locations>"],
+    "technology_shown": ["<list of tech devices/apps shown>"],
+    "animals_present": ["<list of animals/mascots if any>"],
+    "distinctive_brand_assets": ["<list of brand-specific visual assets like mascots, colors, characters>"]
+  },
+  "brand_visibility": {
+    "primary_brand": "<main brand featured>",
+    "brand_first_appearance_frame": <int>,
+    "brand_appearances_count": <int - how many frames show the brand>,
+    "logo_positions": ["<where logo appears across frames>"],
+    "brand_prominence_score": <0.0-1.0, how prominently featured is the brand?>
+  }
+}
+"""
+
+
 class StoryboardError(Exception):
     """Base exception for storyboard processing errors."""
     pass
@@ -478,10 +556,193 @@ def _normalise_shots(shots: Iterable[dict]) -> List[dict]:
     return normalised
 
 
+def analyse_frames_for_objects(
+    samples: Sequence[FrameSample],
+    tier: str | None = None,
+) -> dict:
+    """
+    Analyze sampled frames for detailed object detection using Gemini Vision.
+    
+    Returns structured object detection data including products, logos, text (OCR),
+    people, vehicles, and other visual elements.
+    
+    Args:
+        samples: Sequence of FrameSample objects with frame paths and timestamps
+        tier: Optional tier for model selection (e.g., "premium", "standard")
+    
+    Returns:
+        Dict with detected_objects, aggregate_summary, and brand_visibility
+    """
+    vision_cfg = get_vision_config()
+    if not is_vision_enabled(vision_cfg) or not samples:
+        return _empty_object_detection_result()
+    
+    if vision_cfg.provider == "google":
+        if genai is None:
+            raise RuntimeError(
+                "google-genai package is required for Gemini vision but is not installed."
+            )
+        model_name = resolve_vision_model(tier, vision_cfg)
+        if not model_name:
+            raise RuntimeError("Vision model could not be resolved for the requested tier.")
+        return _analyse_objects_with_gemini(samples, vision_cfg, model_name)
+    
+    return _empty_object_detection_result()
+
+
+def _empty_object_detection_result() -> dict:
+    """Return empty object detection result structure."""
+    return {
+        "detected_objects": [],
+        "aggregate_summary": {
+            "unique_products": [],
+            "unique_logos": [],
+            "all_text_ocr": [],
+            "people_count_max": 0,
+            "people_demographics": None,
+            "primary_setting": None,
+            "scene_types": [],
+            "technology_shown": [],
+            "animals_present": [],
+            "distinctive_brand_assets": [],
+        },
+        "brand_visibility": {
+            "primary_brand": None,
+            "brand_first_appearance_frame": None,
+            "brand_appearances_count": 0,
+            "logo_positions": [],
+            "brand_prominence_score": 0.0,
+        },
+    }
+
+
+def _analyse_objects_with_gemini(
+    samples: Sequence[FrameSample],
+    cfg: VisionConfig,
+    model_name: str,
+) -> dict:
+    """Run object detection analysis using Gemini Vision API."""
+    if genai is None:
+        raise RuntimeError("google-genai package is not installed.")
+    
+    client = genai.Client(api_key=cfg.api_key)
+    limited = list(samples)[:MAX_GEMINI_FRAMES]
+    
+    # Build timeline for context
+    timeline = "\n".join(
+        f"Frame {idx}: timestamp={sample.timestamp:.2f}s" 
+        for idx, sample in enumerate(limited)
+    )
+    
+    prompt = f"{OBJECT_DETECTION_PROMPT}\n\nFrames timeline:\n{timeline}"
+    
+    # Build content parts with frames
+    content_parts = [types.Part.from_text(text=prompt)]
+    for sample in limited:
+        with open(sample.frame_path, "rb") as fh:
+            content_parts.append(
+                types.Part.from_bytes(data=fh.read(), mime_type="image/jpeg")
+            )
+    
+    logger.info("Running object detection on %d frames with %s", len(limited), model_name)
+    
+    response = client.models.generate_content(
+        model=model_name,
+        contents=content_parts,
+    )
+    
+    # Check for blocked/filtered responses
+    if hasattr(response, "candidates") and response.candidates:
+        candidate = response.candidates[0]
+        if hasattr(candidate, "finish_reason"):
+            finish_reason = str(candidate.finish_reason).upper()
+            if "SAFETY" in finish_reason or "BLOCKED" in finish_reason:
+                logger.warning(
+                    "Gemini object detection blocked by safety filter: %s",
+                    finish_reason
+                )
+                raise SafetyBlockError(f"Content blocked by Gemini safety filter: {finish_reason}")
+    
+    raw = getattr(response, "text", None) or ""
+    
+    if not raw.strip():
+        logger.warning(
+            "Gemini returned empty object detection response for %d frames.",
+            len(samples)
+        )
+        return _empty_object_detection_result()
+    
+    return _parse_object_detection_json(raw)
+
+
+def _parse_object_detection_json(raw_output: str) -> dict:
+    """Parse object detection JSON output from Gemini."""
+    if not raw_output or not raw_output.strip():
+        return _empty_object_detection_result()
+    
+    # Strip markdown fences
+    cleaned = _strip_markdown_fences(raw_output)
+    
+    if not cleaned.strip():
+        return _empty_object_detection_result()
+    
+    # Try parsing as JSON
+    candidates = [
+        cleaned,
+        # Extract object content
+        cleaned[cleaned.find("{"):cleaned.rfind("}") + 1]
+        if "{" in cleaned and "}" in cleaned
+        else None,
+    ]
+    
+    for blob in candidates:
+        if not blob:
+            continue
+        try:
+            data = json.loads(blob)
+            if isinstance(data, dict):
+                return _normalise_object_detection(data)
+        except json.JSONDecodeError as e:
+            logger.debug("Object detection JSON parse attempt failed: %s", str(e)[:100])
+            continue
+    
+    logger.warning(
+        "Failed to parse object detection JSON. Raw output (first 500 chars): %s",
+        raw_output[:500]
+    )
+    return _empty_object_detection_result()
+
+
+def _normalise_object_detection(data: dict) -> dict:
+    """Normalise object detection result to ensure all expected fields exist."""
+    result = _empty_object_detection_result()
+    
+    # Copy detected_objects if present
+    if "detected_objects" in data and isinstance(data["detected_objects"], list):
+        result["detected_objects"] = data["detected_objects"]
+    
+    # Merge aggregate_summary
+    if "aggregate_summary" in data and isinstance(data["aggregate_summary"], dict):
+        for key, default in result["aggregate_summary"].items():
+            if key in data["aggregate_summary"]:
+                result["aggregate_summary"][key] = data["aggregate_summary"][key]
+    
+    # Merge brand_visibility
+    if "brand_visibility" in data and isinstance(data["brand_visibility"], dict):
+        for key, default in result["brand_visibility"].items():
+            if key in data["brand_visibility"]:
+                result["brand_visibility"][key] = data["brand_visibility"][key]
+    
+    return result
+
+
 __all__ = [
     "FrameSample",
     "sample_frames_for_storyboard",
     "cleanup_frame_samples",
     "analyse_frames_to_storyboard",
+    "analyse_frames_for_objects",
+    "SafetyBlockError",
+    "StoryboardError",
 ]
 

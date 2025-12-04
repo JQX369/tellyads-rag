@@ -23,8 +23,16 @@ from .prompts.extraction_v2 import (
     DEFAULT_SECTIONS,
     deep_merge,
 )
+from .extraction_warnings import (
+    WarningCode,
+    add_warning,
+    ensure_warnings_and_fill_rate,
+)
 
 logger = logging.getLogger(__name__)
+
+# Module-level warnings accumulator for JSON repair tracking
+_pending_warnings: List[Dict[str, Any]] = []
 
 # Current extraction version
 EXTRACTION_VERSION = "2.0"
@@ -103,64 +111,100 @@ def _try_parse_json(candidate: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _parse_with_retries(raw_output: str) -> Dict[str, Any]:
-    """Parse JSON output with multiple fallback strategies."""
+def _parse_with_retries(raw_output: str, warnings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Parse JSON output with multiple fallback strategies.
+
+    Args:
+        raw_output: Raw LLM output
+        warnings: List to append warnings to
+    """
+    global _pending_warnings
     cleaned = _strip_markdown_fences(raw_output)
-    
-    attempts = [
-        cleaned,
-        cleaned[cleaned.find("{"): cleaned.rfind("}") + 1]
-        if "{" in cleaned and "}" in cleaned
-        else None,
-    ]
-    
-    for attempt in attempts:
-        if not attempt:
-            continue
-        parsed = _try_parse_json(attempt)
+
+    # Try direct parse first
+    parsed = _try_parse_json(cleaned)
+    if parsed is not None:
+        return parsed
+
+    # Try extracting JSON object
+    if "{" in cleaned and "}" in cleaned:
+        extracted = cleaned[cleaned.find("{"): cleaned.rfind("}") + 1]
+        parsed = _try_parse_json(extracted)
         if parsed is not None:
+            warnings.append({
+                "code": WarningCode.JSON_PARSE_FALLBACK,
+                "message": "JSON parsed after extracting object from response",
+                "meta": {"strategy": "extract_object"},
+            })
+            logger.warning(
+                "Extraction warning [%s]: JSON required fallback extraction",
+                WarningCode.JSON_PARSE_FALLBACK
+            )
             return parsed
 
     # Last resort: ask model to repair
-    logger.warning("Initial JSON parse failed, attempting repair...")
+    logger.warning("Initial JSON parse failed, attempting LLM repair...")
     repaired = _repair_json_with_model(raw_output)
     if repaired:
         parsed = _try_parse_json(_strip_markdown_fences(repaired))
         if parsed is not None:
+            warnings.append({
+                "code": WarningCode.JSON_REPAIRED,
+                "message": "JSON was malformed and required LLM repair",
+                "meta": {"original_length": len(raw_output), "repaired_length": len(repaired)},
+            })
+            logger.warning(
+                "Extraction warning [%s]: JSON required LLM repair | original_len=%d, repaired_len=%d",
+                WarningCode.JSON_REPAIRED, len(raw_output), len(repaired)
+            )
             return parsed
 
     raise ValueError("LLM analysis output was not valid JSON after retries.")
 
 
-def _normalise_analysis_v2(data: Dict[str, Any]) -> Dict[str, Any]:
+def _normalise_analysis_v2(
+    data: Dict[str, Any],
+    warnings: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     """
     Ensure the returned dict has all expected sections with safe defaults.
-    
+
     This comprehensive normalisation handles:
     - Missing sections (replaced with defaults)
     - Missing nested fields (merged with defaults)
     - Type validation for critical fields
     - Version stamping
+
+    Args:
+        data: Raw parsed LLM output
+        warnings: Optional list to append warnings to
     """
+    if warnings is None:
+        warnings = []
+
     result = {}
-    
+
     # Add extraction metadata
     result["extraction_version"] = data.get("extraction_version", EXTRACTION_VERSION)
     result["extraction_timestamp"] = data.get(
-        "extraction_timestamp", 
+        "extraction_timestamp",
         datetime.now(timezone.utc).isoformat()
     )
     result["confidence_overall"] = data.get("confidence_overall", 0.5)
-    
+
+    # Track missing sections
+    missing_sections = []
+
     # Process each section with defaults
     for section_name, default_value in DEFAULT_SECTIONS.items():
         if section_name not in data or data[section_name] is None:
             # Section missing - use defaults
             result[section_name] = copy.deepcopy(default_value)
+            missing_sections.append(section_name)
         elif isinstance(default_value, dict) and isinstance(data[section_name], dict):
             # Merge nested dicts
             result[section_name] = deep_merge(
-                copy.deepcopy(default_value), 
+                copy.deepcopy(default_value),
                 data[section_name]
             )
         elif isinstance(default_value, list):
@@ -168,55 +212,155 @@ def _normalise_analysis_v2(data: Dict[str, Any]) -> Dict[str, Any]:
             result[section_name] = data[section_name] if data[section_name] else []
         else:
             result[section_name] = data[section_name]
-    
-    # Ensure critical nested structures are valid
-    _ensure_valid_impact_scores(result.get("impact_scores", {}))
-    _ensure_valid_emotional_timeline(result.get("emotional_timeline", {}))
+
+    # Log missing sections
+    if missing_sections:
+        warnings.append({
+            "code": WarningCode.SECTION_MISSING,
+            "message": f"Missing sections defaulted: {', '.join(missing_sections[:5])}{'...' if len(missing_sections) > 5 else ''}",
+            "meta": {"sections": missing_sections, "count": len(missing_sections)},
+        })
+        logger.warning(
+            "Extraction warning [%s]: %d sections missing: %s",
+            WarningCode.SECTION_MISSING,
+            len(missing_sections),
+            missing_sections[:10]
+        )
+
+    # Ensure critical nested structures are valid (pass warnings for tracking)
+    _ensure_valid_impact_scores(result.get("impact_scores", {}), warnings)
+    _ensure_valid_emotional_timeline(result.get("emotional_timeline", {}), warnings)
     _ensure_valid_brain_balance(result.get("brain_balance", {}))
-    
+    _ensure_valid_characters(result.get("characters", []), warnings)
+    _ensure_valid_cast_diversity(result.get("cast_diversity", {}))
+
     return result
 
 
-def _ensure_valid_impact_scores(scores: Dict[str, Any]) -> None:
+def _ensure_valid_impact_scores(
+    scores: Dict[str, Any],
+    warnings: Optional[List[Dict[str, Any]]] = None
+) -> None:
     """Validate and fix impact scores structure."""
+    if warnings is None:
+        warnings = []
+
     score_fields = [
         "overall_impact", "pulse_score", "echo_score", "hook_power",
         "brand_integration", "emotional_resonance", "clarity_score", "distinctiveness"
     ]
-    
+
     for field in score_fields:
         if field not in scores or not isinstance(scores[field], dict):
             scores[field] = {
-                "score": 5.0,
-                "confidence": 0.5,
+                "score": None,  # Keep as None instead of silent 5.0 default
+                "confidence": 0.0,
                 "rationale": "Unable to assess" if field == "overall_impact" else "",
             }
+            warnings.append({
+                "code": WarningCode.SCORE_DEFAULTED,
+                "message": f"Impact score '{field}' was missing, defaulted to null",
+                "meta": {"field": f"impact_scores.{field}", "default_value": None},
+            })
+            logger.warning(
+                "Extraction warning [%s]: impact_scores.%s missing, set to null",
+                WarningCode.SCORE_DEFAULTED, field
+            )
         else:
             # Ensure score is in valid range
             if "score" in scores[field]:
                 try:
-                    scores[field]["score"] = max(0.0, min(10.0, float(scores[field]["score"])))
+                    original = scores[field]["score"]
+                    score_val = float(original)
+                    clamped = max(0.0, min(10.0, score_val))
+                    if clamped != score_val:
+                        warnings.append({
+                            "code": WarningCode.SCORE_CLAMPED,
+                            "message": f"Impact score '{field}' clamped from {score_val} to {clamped}",
+                            "meta": {"field": f"impact_scores.{field}", "original": score_val, "clamped": clamped},
+                        })
+                        logger.warning(
+                            "Extraction warning [%s]: impact_scores.%s clamped %s -> %s",
+                            WarningCode.SCORE_CLAMPED, field, score_val, clamped
+                        )
+                    scores[field]["score"] = clamped
                 except (TypeError, ValueError):
-                    scores[field]["score"] = 5.0
+                    scores[field]["score"] = None
+                    warnings.append({
+                        "code": WarningCode.SCORE_DEFAULTED,
+                        "message": f"Impact score '{field}' had invalid value, set to null",
+                        "meta": {"field": f"impact_scores.{field}", "invalid_value": str(scores[field].get("score"))},
+                    })
+                    logger.warning(
+                        "Extraction warning [%s]: impact_scores.%s invalid, set to null",
+                        WarningCode.SCORE_DEFAULTED, field
+                    )
             else:
-                scores[field]["score"] = 5.0
-                
+                scores[field]["score"] = None
+                warnings.append({
+                    "code": WarningCode.SCORE_DEFAULTED,
+                    "message": f"Impact score '{field}.score' missing, set to null",
+                    "meta": {"field": f"impact_scores.{field}.score"},
+                })
+
             if "confidence" not in scores[field]:
-                scores[field]["confidence"] = 0.5
+                scores[field]["confidence"] = 0.0
 
 
-def _ensure_valid_emotional_timeline(timeline: Dict[str, Any]) -> None:
-    """Validate emotional timeline structure."""
+def _ensure_valid_emotional_timeline(
+    timeline: Dict[str, Any],
+    warnings: Optional[List[Dict[str, Any]]] = None
+) -> None:
+    """Validate emotional timeline structure with enhanced granular fields."""
+    if warnings is None:
+        warnings = []
+
     if "readings" not in timeline or not isinstance(timeline["readings"], list):
         timeline["readings"] = []
-    
+
     for reading in timeline["readings"]:
         if isinstance(reading, dict):
             reading.setdefault("t_s", 0.0)
             reading.setdefault("dominant_emotion", "neutral")
+            reading.setdefault("secondary_emotion", None)
             reading.setdefault("intensity", 0.5)
             reading.setdefault("valence", 0.0)
             reading.setdefault("arousal", 0.5)
+            reading.setdefault("trigger", None)
+
+            # Clamp ratio values to 0-1
+            for ratio_field in ["intensity", "arousal"]:
+                if ratio_field in reading:
+                    try:
+                        val = float(reading[ratio_field])
+                        clamped = max(0.0, min(1.0, val))
+                        if clamped != val:
+                            warnings.append({
+                                "code": WarningCode.RATIO_CLAMPED,
+                                "message": f"emotional_timeline.readings.{ratio_field} clamped {val} -> {clamped}",
+                                "meta": {"field": f"readings.{ratio_field}", "original": val, "clamped": clamped},
+                            })
+                        reading[ratio_field] = clamped
+                    except (TypeError, ValueError):
+                        reading[ratio_field] = 0.5
+
+    # Ensure emotional_transitions exists
+    if "emotional_transitions" not in timeline or not isinstance(timeline["emotional_transitions"], list):
+        timeline["emotional_transitions"] = []
+
+    for transition in timeline["emotional_transitions"]:
+        if isinstance(transition, dict):
+            transition.setdefault("from_emotion", "neutral")
+            transition.setdefault("to_emotion", "neutral")
+            transition.setdefault("transition_time_s", 0.0)
+            transition.setdefault("transition_type", "gradual")
+            transition.setdefault("effectiveness", 0.5)
+
+    # Ensure new timeline summary fields
+    timeline.setdefault("trough_moment_s", None)
+    timeline.setdefault("trough_emotion", None)
+    timeline.setdefault("emotional_range", 0.5)
+    timeline.setdefault("final_viewer_state", "neutral")
 
 
 def _ensure_valid_brain_balance(balance: Dict[str, Any]) -> None:
@@ -244,6 +388,76 @@ def _ensure_valid_brain_balance(balance: Dict[str, Any]) -> None:
             "has_instructional_content": False,
             "has_urgency_messaging": False,
         }
+
+
+def _ensure_valid_characters(
+    characters: List[Dict[str, Any]],
+    warnings: Optional[List[Dict[str, Any]]] = None
+) -> None:
+    """Validate and normalize character entries with detailed ethnicity structure."""
+    if warnings is None:
+        warnings = []
+
+    for idx, char in enumerate(characters):
+        if not isinstance(char, dict):
+            continue
+
+        # Ensure ethnicity is a structured dict, not a string
+        ethnicity = char.get("ethnicity")
+        if ethnicity is None or isinstance(ethnicity, str):
+            # Convert legacy string format to new structured format
+            char["ethnicity"] = {
+                "primary": ethnicity if isinstance(ethnicity, str) else "unclear",
+                "regional_detail": None,
+                "confidence": 0.5,
+            }
+        elif isinstance(ethnicity, dict):
+            ethnicity.setdefault("primary", "unclear")
+            ethnicity.setdefault("regional_detail", None)
+            ethnicity.setdefault("confidence", 0.5)
+
+        # Ensure physical_traits exists
+        if "physical_traits" not in char or not isinstance(char.get("physical_traits"), dict):
+            char["physical_traits"] = {
+                "hair_color": "unclear",
+                "distinctive_features": None,
+            }
+        else:
+            char["physical_traits"].setdefault("hair_color", "unclear")
+            char["physical_traits"].setdefault("distinctive_features", None)
+
+        # Ensure other required fields
+        char.setdefault("role", "background")
+        char.setdefault("screen_time_pct", 0.0)
+        char.setdefault("gender", "unclear")
+        char.setdefault("age_bracket", "ageless")
+        char.setdefault("is_celebrity", False)
+        char.setdefault("celebrity_name", None)
+        char.setdefault("character_type", "real_person")
+        char.setdefault("relatability_score", None)  # Don't default to 5.0
+        char.setdefault("likability_score", None)    # Don't default to 5.0
+
+
+def _ensure_valid_cast_diversity(diversity: Dict[str, Any]) -> None:
+    """Validate cast diversity structure."""
+    diversity.setdefault("total_characters", 0)
+    
+    if "gender_breakdown" not in diversity or not isinstance(diversity.get("gender_breakdown"), dict):
+        diversity["gender_breakdown"] = {"male": 0, "female": 0, "non_binary": 0, "unclear": 0}
+    else:
+        diversity["gender_breakdown"].setdefault("male", 0)
+        diversity["gender_breakdown"].setdefault("female", 0)
+        diversity["gender_breakdown"].setdefault("non_binary", 0)
+        diversity["gender_breakdown"].setdefault("unclear", 0)
+    
+    if "ethnicity_breakdown" not in diversity or not isinstance(diversity.get("ethnicity_breakdown"), dict):
+        diversity["ethnicity_breakdown"] = {}
+    
+    if "age_range_present" not in diversity or not isinstance(diversity.get("age_range_present"), list):
+        diversity["age_range_present"] = []
+    
+    diversity.setdefault("diversity_score", 5.0)
+    diversity.setdefault("representation_notes", None)
 
 
 def extract_flat_metadata(analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -320,32 +534,64 @@ def extract_jsonb_columns(analysis: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def analyse_ad_transcript(transcript: Dict[str, Any]) -> Dict[str, Any]:
+def analyse_ad_transcript(
+    transcript: Dict[str, Any],
+    external_id: str = "unknown"
+) -> Dict[str, Any]:
     """
     Run the v2.0 LLM analysis workflow for a transcript dict containing `text` + `segments`.
-    
-    Returns the full normalised analysis with all 22 sections.
+
+    Returns the full normalised analysis with all 22 sections, including:
+    - extraction_warnings: List of warning entries
+    - extraction_fill_rate: Fill rate metrics
+
+    Args:
+        transcript: Dict with 'text' and optional 'segments'
+        external_id: Optional identifier for logging
     """
+    # Initialize warnings list to track issues through the pipeline
+    warnings: List[Dict[str, Any]] = []
+
     transcript_text = transcript.get("text", "")
     segments = transcript.get("segments") or []
-    
+
+    # Warn if transcript is empty
+    if not transcript_text.strip():
+        warnings.append({
+            "code": WarningCode.TRANSCRIPT_EMPTY,
+            "message": "Transcript text is empty or missing",
+            "meta": {"segments_count": len(segments)},
+        })
+        logger.warning(
+            "Extraction warning [%s]: Transcript empty for %s",
+            WarningCode.TRANSCRIPT_EMPTY, external_id
+        )
+
+    # Call LLM and parse response (warnings accumulated in list)
     raw_output = _call_analysis_model(transcript_text, segments)
-    parsed = _parse_with_retries(raw_output)
-    normalised = _normalise_analysis_v2(parsed)
-    
+    parsed = _parse_with_retries(raw_output, warnings)
+    normalised = _normalise_analysis_v2(parsed, warnings)
+
+    # Attach accumulated warnings
+    normalised["extraction_warnings"] = warnings
+
+    # Compute and attach fill rates (also logs)
+    ensure_warnings_and_fill_rate(normalised, external_id)
+
     # Log summary stats
     impact = normalised.get("impact_scores", {})
     overall = impact.get("overall_impact", {})
     emotional = normalised.get("emotional_timeline", {})
     effectiveness = normalised.get("effectiveness_drivers", {})
-    
+
     logger.info(
-        "Extraction v2.0 complete: overall_impact=%.1f, hook=%.1f, echo=%.1f | "
+        "[%s] Extraction v2.0 complete: overall_impact=%s, hook=%s, echo=%s | "
         "emotion_arc=%s, peak=%s | strengths=%d, weaknesses=%d | "
-        "segments=%d, claims=%d, characters=%d",
-        overall.get("score", 0),
-        impact.get("hook_power", {}).get("score", 0),
-        impact.get("echo_score", {}).get("score", 0),
+        "segments=%d, claims=%d, characters=%d | warnings=%d",
+        external_id,
+        overall.get("score", "null"),
+        impact.get("hook_power", {}).get("score", "null"),
+        impact.get("echo_score", {}).get("score", "null"),
         emotional.get("arc_shape", "unknown"),
         emotional.get("peak_emotion", "unknown"),
         len(effectiveness.get("strengths", [])),
@@ -353,8 +599,9 @@ def analyse_ad_transcript(transcript: Dict[str, Any]) -> Dict[str, Any]:
         len(normalised.get("segments", [])),
         len(normalised.get("claims", [])),
         len(normalised.get("characters", [])),
+        len(normalised.get("extraction_warnings", [])),
     )
-    
+
     return normalised
 
 
