@@ -97,8 +97,8 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
       year: row.year,
       duration_seconds: row.duration_seconds,
       // Note: video_url/thumbnail_url not stored in ads table, would need CSV lookup
-      video_url: null,
-      thumbnail_url: null,
+      video_url: undefined,
+      thumbnail_url: undefined,
       impact_scores: row.impact_scores,
       hero_analysis: row.hero_analysis,
       curated_tags: row.curated_tags || [],
