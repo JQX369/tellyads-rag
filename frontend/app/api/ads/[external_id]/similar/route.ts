@@ -1,0 +1,125 @@
+/**
+ * Similar Ads API Route Handler
+ *
+ * GET /api/ads/[external_id]/similar
+ *
+ * Returns similar ads based on embedding similarity.
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { queryOne, queryAll, PUBLISH_GATE_CONDITION } from '@/lib/db';
+
+export const runtime = 'nodejs';
+
+interface RouteContext {
+  params: Promise<{ external_id: string }>;
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const { external_id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const limit = Math.min(parseInt(searchParams.get('limit') || '10', 10), 50);
+
+  if (!external_id) {
+    return NextResponse.json(
+      { error: 'external_id is required' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // Get source ad with embedding
+    const sourceAd = await queryOne(
+      'SELECT id, embedding FROM ads WHERE external_id = $1',
+      [external_id]
+    );
+
+    if (!sourceAd) {
+      return NextResponse.json(
+        { error: 'Ad not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!sourceAd.embedding) {
+      return NextResponse.json({
+        external_id,
+        total: 0,
+        results: [],
+        message: 'Source ad has no embedding',
+      });
+    }
+
+    // Find similar ads by embedding
+    const results = await queryAll(
+      `
+      SELECT
+        a.id,
+        a.external_id,
+        a.brand_name,
+        a.product_name,
+        a.product_category,
+        a.one_line_summary,
+        a.format_type,
+        a.year,
+        a.duration_seconds,
+        a.thumbnail_url,
+        a.video_url,
+        a.impact_scores,
+        e.brand_slug,
+        e.slug,
+        e.headline,
+        e.curated_tags,
+        e.is_featured,
+        1 - (a.embedding <=> $1::vector) as similarity
+      FROM ads a
+      LEFT JOIN ad_editorial e ON e.ad_id = a.id AND ${PUBLISH_GATE_CONDITION}
+      WHERE a.id != $2
+        AND a.embedding IS NOT NULL
+      ORDER BY a.embedding <=> $1::vector
+      LIMIT $3
+      `,
+      [sourceAd.embedding, sourceAd.id, limit]
+    );
+
+    const formattedResults = results.map((row) => ({
+      id: row.id,
+      external_id: row.external_id,
+      brand_name: row.brand_name,
+      brand_slug: row.brand_slug,
+      slug: row.slug,
+      headline: row.headline || row.one_line_summary,
+      one_line_summary: row.one_line_summary,
+      product_name: row.product_name,
+      product_category: row.product_category,
+      format_type: row.format_type,
+      year: row.year,
+      duration_seconds: row.duration_seconds,
+      thumbnail_url: row.thumbnail_url,
+      video_url: row.video_url,
+      impact_scores: row.impact_scores,
+      curated_tags: row.curated_tags || [],
+      is_featured: row.is_featured || false,
+      similarity: row.similarity,
+      canonical_url: row.brand_slug && row.slug
+        ? `/advert/${row.brand_slug}/${row.slug}`
+        : `/ads/${row.external_id}`,
+    }));
+
+    return NextResponse.json({
+      external_id,
+      total: formattedResults.length,
+      results: formattedResults,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching similar ads:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch similar ads' },
+      { status: 500 }
+    );
+  }
+}

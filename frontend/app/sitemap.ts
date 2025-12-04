@@ -1,22 +1,65 @@
-import { MetadataRoute } from 'next';
+/**
+ * Dynamic Sitemap Generation
+ *
+ * Generates sitemap.xml with all published editorial pages.
+ * Uses ISR with revalidation.
+ */
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://tellyads.com';
+import { MetadataRoute } from 'next';
+import { queryAll, PUBLISH_GATE_CONDITION } from '@/lib/db';
+
+export const runtime = 'nodejs';
+
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tellyads.com';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // In a real app, fetch these from API
-  // const ads = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/recent?limit=1000`).then(res => res.json());
-  
-  const routes = [
-    '',
-    '/about',
-    '/how-it-works',
-    '/search',
-  ].map((route) => ({
-    url: `${BASE_URL}${route}`,
-    lastModified: new Date(),
-    changeFrequency: 'daily' as const,
-    priority: route === '' ? 1 : 0.8,
-  }));
+  // Static pages
+  const staticPages: MetadataRoute.Sitemap = [
+    {
+      url: `${BASE_URL}`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 1.0,
+    },
+    {
+      url: `${BASE_URL}/browse`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+    {
+      url: `${BASE_URL}/search`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+  ];
 
-  return [...routes];
+  // Dynamic advert pages from published editorial
+  try {
+    const editorialPages = await queryAll(
+      `
+      SELECT
+        e.brand_slug,
+        e.slug,
+        GREATEST(e.updated_at, a.updated_at) as last_modified
+      FROM ad_editorial e
+      JOIN ads a ON a.id = e.ad_id
+      WHERE ${PUBLISH_GATE_CONDITION}
+      ORDER BY e.updated_at DESC
+      `
+    );
+
+    const advertPages: MetadataRoute.Sitemap = editorialPages.map((row) => ({
+      url: `${BASE_URL}/advert/${row.brand_slug}/${row.slug}`,
+      lastModified: row.last_modified ? new Date(row.last_modified) : new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    }));
+
+    return [...staticPages, ...advertPages];
+  } catch (error) {
+    console.error('Error generating sitemap:', error);
+    return staticPages;
+  }
 }
