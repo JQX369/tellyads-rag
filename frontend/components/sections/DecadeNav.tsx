@@ -69,9 +69,9 @@ export function DecadeNav() {
 
         {/* Film Strip - Top Right */}
         <motion.div
-          className="absolute -top-8 -right-16 rotate-[15deg] opacity-[0.15]"
+          className="absolute top-12 -right-4 rotate-[15deg] opacity-[0.35]"
           initial={{ x: 100, opacity: 0 }}
-          whileInView={{ x: 0, opacity: 0.15 }}
+          whileInView={{ x: 0, opacity: 0.35 }}
           viewport={{ once: true }}
           transition={{ duration: 1, delay: 0.3 }}
         >
@@ -80,9 +80,9 @@ export function DecadeNav() {
 
         {/* Film Strip - Bottom Left */}
         <motion.div
-          className="absolute -bottom-8 -left-16 -rotate-[15deg] opacity-[0.12]"
+          className="absolute bottom-12 -left-4 -rotate-[15deg] opacity-[0.3]"
           initial={{ x: -100, opacity: 0 }}
-          whileInView={{ x: 0, opacity: 0.12 }}
+          whileInView={{ x: 0, opacity: 0.3 }}
           viewport={{ once: true }}
           transition={{ duration: 1, delay: 0.5 }}
         >
