@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE embedding IS NOT NULL) as ads_with_embeddings,
         COUNT(*) FILTER (WHERE year IS NOT NULL) as ads_with_year,
         MIN(year) as earliest_year,
-        MAX(year) as latest_year
+        MAX(year) as latest_year,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as recent_count,
+        COUNT(*) FILTER (WHERE processing_status IN ('pending', 'processing')) as processing_count
       FROM ads
     `);
 
@@ -64,6 +66,8 @@ export async function GET(request: NextRequest) {
       ads_with_year: parseInt(counts?.ads_with_year ?? '0', 10),
       earliest_year: counts?.earliest_year ?? null,
       latest_year: counts?.latest_year ?? null,
+      recent_count: parseInt(counts?.recent_count ?? '0', 10),
+      processing_count: parseInt(counts?.processing_count ?? '0', 10),
       total_editorial: parseInt(editorialCounts?.total_editorial ?? '0', 10),
       published_editorial: parseInt(editorialCounts?.published_editorial ?? '0', 10),
       categories: categories.map((row) => ({
