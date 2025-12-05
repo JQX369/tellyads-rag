@@ -66,6 +66,28 @@ export function DecadeNav() {
           animate={{ rotate: -360 }}
           transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
         />
+
+        {/* Film Strip - Top Right */}
+        <motion.div
+          className="absolute -top-8 -right-16 rotate-[15deg] opacity-[0.15]"
+          initial={{ x: 100, opacity: 0 }}
+          whileInView={{ x: 0, opacity: 0.15 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1, delay: 0.3 }}
+        >
+          <FilmStrip direction="down" />
+        </motion.div>
+
+        {/* Film Strip - Bottom Left */}
+        <motion.div
+          className="absolute -bottom-8 -left-16 -rotate-[15deg] opacity-[0.12]"
+          initial={{ x: -100, opacity: 0 }}
+          whileInView={{ x: 0, opacity: 0.12 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1, delay: 0.5 }}
+        >
+          <FilmStrip direction="up" />
+        </motion.div>
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12">
@@ -247,5 +269,75 @@ function DecadeTV({
         </div>
       </motion.article>
     </Link>
+  );
+}
+
+// Film strip component for background decoration
+function FilmStrip({ direction }: { direction: "up" | "down" }) {
+  const frames = Array.from({ length: 8 }, (_, i) => i);
+
+  return (
+    <div className="flex flex-col">
+      {/* Film strip with sprocket holes */}
+      <div className="relative bg-zinc-900 rounded-sm" style={{ width: 120 }}>
+        {/* Left sprocket holes */}
+        <div className="absolute left-1 top-0 bottom-0 flex flex-col justify-around py-2">
+          {frames.map((i) => (
+            <div key={`l-${i}`} className="w-2 h-3 bg-black/80 rounded-sm" />
+          ))}
+        </div>
+
+        {/* Right sprocket holes */}
+        <div className="absolute right-1 top-0 bottom-0 flex flex-col justify-around py-2">
+          {frames.map((i) => (
+            <div key={`r-${i}`} className="w-2 h-3 bg-black/80 rounded-sm" />
+          ))}
+        </div>
+
+        {/* Film frames */}
+        <div className="px-5 py-2 flex flex-col gap-1">
+          {frames.map((i) => (
+            <motion.div
+              key={i}
+              className="relative bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-sm overflow-hidden"
+              style={{ width: 80, height: 60 }}
+              initial={{ opacity: 0.3 }}
+              animate={{
+                opacity: [0.3, 0.6, 0.3],
+              }}
+              transition={{
+                duration: 3,
+                delay: i * 0.2,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            >
+              {/* Simulated ad still content */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div
+                  className="w-full h-full"
+                  style={{
+                    background: `linear-gradient(${45 + i * 15}deg,
+                      ${i % 3 === 0 ? 'rgba(230,57,70,0.2)' : i % 3 === 1 ? 'rgba(59,130,246,0.2)' : 'rgba(16,185,129,0.2)'} 0%,
+                      transparent 60%)`,
+                  }}
+                />
+              </div>
+              {/* TV static overlay */}
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+                }}
+              />
+              {/* Frame number */}
+              <div className="absolute bottom-0.5 right-1 font-mono text-[6px] text-white/30">
+                {direction === "down" ? i + 1 : 8 - i}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
