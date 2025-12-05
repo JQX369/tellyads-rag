@@ -16,7 +16,6 @@ interface Ad {
   product_category?: string;
   one_line_summary?: string;
   duration_seconds?: number;
-  processing_status?: string;
   has_embedding?: boolean;
   editorial_status?: string;
   is_hidden?: boolean;
@@ -27,7 +26,6 @@ interface Ad {
 
 interface FilterOptions {
   categories: { name: string; count: number }[];
-  statuses: { name: string; count: number }[];
 }
 
 interface EditingAd extends Ad {
@@ -46,10 +44,8 @@ export default function ManageAdsPage() {
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     categories: [],
-    statuses: [],
   });
   const [pagination, setPagination] = useState({
     total: 0,
@@ -84,7 +80,7 @@ export default function ManageAdsPage() {
     if (isAuthenticated) {
       fetchAds(0, true);
     }
-  }, [isAuthenticated, debouncedSearch, sortField, sortOrder, categoryFilter, statusFilter]);
+  }, [isAuthenticated, debouncedSearch, sortField, sortOrder, categoryFilter]);
 
   const fetchAds = async (offset: number = 0, reset: boolean = false) => {
     setLoading(true);
@@ -98,7 +94,6 @@ export default function ManageAdsPage() {
 
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (categoryFilter) params.set("category", categoryFilter);
-      if (statusFilter) params.set("status", statusFilter);
 
       const response = await fetch(`/api/admin/ads?${params}`, {
         headers: {
@@ -263,18 +258,6 @@ export default function ManageAdsPage() {
     fetchAds(nextOffset, false);
   };
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case "complete":
-        return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "processing":
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-      case "error":
-        return "bg-red-500/20 text-red-400 border-red-500/30";
-      default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/30";
-    }
-  };
 
   if (!isAuthenticated) {
     return (
@@ -343,20 +326,6 @@ export default function ManageAdsPage() {
               {filterOptions.categories.map((cat) => (
                 <option key={cat.name} value={cat.name}>
                   {cat.name} ({cat.count})
-                </option>
-              ))}
-            </select>
-
-            {/* Status filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 bg-static/50 border border-white/10 rounded font-mono text-sm text-signal focus:outline-none focus:ring-2 focus:ring-transmission"
-            >
-              <option value="">All Statuses</option>
-              {filterOptions.statuses.map((status) => (
-                <option key={status.name} value={status.name}>
-                  {status.name} ({status.count})
                 </option>
               ))}
             </select>
@@ -444,7 +413,7 @@ export default function ManageAdsPage() {
                   onSort={handleSort}
                 />
                 <th className="text-left px-4 py-3 font-mono text-xs uppercase tracking-wide text-antenna">
-                  Status
+                  Embedded
                 </th>
                 <th className="text-left px-4 py-3 font-mono text-xs uppercase tracking-wide text-antenna">
                   Editorial
@@ -517,10 +486,12 @@ export default function ManageAdsPage() {
                       <span
                         className={clsx(
                           "inline-block px-2 py-0.5 text-xs font-mono rounded border",
-                          getStatusColor(ad.processing_status)
+                          ad.has_embedding
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : "bg-gray-500/20 text-gray-400 border-gray-500/30"
                         )}
                       >
-                        {ad.processing_status || "unknown"}
+                        {ad.has_embedding ? "Yes" : "No"}
                       </span>
                     </td>
                     <td className="px-4 py-3">

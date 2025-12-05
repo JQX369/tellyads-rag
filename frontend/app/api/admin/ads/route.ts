@@ -2,7 +2,6 @@
  * Admin Ads API Route Handler
  *
  * GET /api/admin/ads - List all ads with full details for CMS
- * POST /api/admin/ads - Bulk update ads
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -28,7 +27,6 @@ export async function GET(request: NextRequest) {
   const sortField = searchParams.get('sort') || 'created_at';
   const sortOrder = searchParams.get('order') === 'asc' ? 'ASC' : 'DESC';
   const category = searchParams.get('category') || '';
-  const status = searchParams.get('status') || '';
 
   try {
     // Build filter conditions
@@ -53,14 +51,8 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
-    if (status) {
-      conditions.push(`a.processing_status = $${paramIndex}`);
-      params.push(status);
-      paramIndex++;
-    }
-
     // Validate sort field to prevent SQL injection
-    const allowedSortFields = ['created_at', 'brand_name', 'product_name', 'year', 'product_category', 'processing_status'];
+    const allowedSortFields = ['created_at', 'brand_name', 'product_name', 'year', 'product_category'];
     const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'created_at';
 
     // Get ads with all management fields
@@ -76,11 +68,10 @@ export async function GET(request: NextRequest) {
         a.year,
         a.duration_seconds,
         a.s3_key,
-        a.processing_status,
-        a.processing_notes,
         a.created_at,
         a.updated_at,
-        a.embedding IS NOT NULL as has_embedding,
+        -- Check if ad has embeddings
+        EXISTS(SELECT 1 FROM embedding_items ei WHERE ei.ad_id = a.id) as has_embedding,
         -- Editorial join
         e.id as editorial_id,
         e.status as editorial_status,
@@ -110,15 +101,6 @@ export async function GET(request: NextRequest) {
       ORDER BY count DESC
     `);
 
-    // Get processing status counts
-    const statusCounts = await queryAll(`
-      SELECT
-        COALESCE(processing_status, 'unknown') as status,
-        COUNT(*) as count
-      FROM ads
-      GROUP BY processing_status
-    `);
-
     return NextResponse.json({
       ads: results.map(row => ({
         id: row.id,
@@ -130,8 +112,6 @@ export async function GET(request: NextRequest) {
         year: row.year,
         duration_seconds: row.duration_seconds,
         s3_key: row.s3_key,
-        processing_status: row.processing_status || 'unknown',
-        processing_notes: row.processing_notes,
         created_at: row.created_at,
         updated_at: row.updated_at,
         has_embedding: row.has_embedding,
@@ -150,10 +130,6 @@ export async function GET(request: NextRequest) {
         categories: categories.map(c => ({
           name: c.product_category,
           count: parseInt(c.count),
-        })),
-        statuses: statusCounts.map(s => ({
-          name: s.status,
-          count: parseInt(s.count),
         })),
       },
     });

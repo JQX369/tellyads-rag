@@ -11,7 +11,7 @@ interface AdminStats {
   total_ads: number;
   total_brands: number;
   recent_count?: number;
-  processing_count?: number;
+  ads_with_embeddings?: number;
 }
 
 export default function AdminDashboard() {
@@ -231,13 +231,13 @@ export default function AdminDashboard() {
             />
             <StatCard
               label="This Week"
-              value={stats?.recent_count?.toString() || "—"}
+              value={stats?.recent_count?.toString() || "0"}
               icon="📈"
             />
             <StatCard
-              label="Processing"
-              value={stats?.processing_count?.toString() || "0"}
-              icon="⚙️"
+              label="With Embeddings"
+              value={stats?.ads_with_embeddings?.toString() || "0"}
+              icon="🔍"
             />
           </div>
 
@@ -245,7 +245,13 @@ export default function AdminDashboard() {
           <h2 className="font-mono text-label uppercase tracking-ultra-wide text-antenna mb-6">
             Quick Actions
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <ActionCard
+              title="Editorial"
+              description="Publish & manage ad visibility"
+              href="/admin/editorial"
+              icon="📝"
+            />
             <ActionCard
               title="Upload New Ad"
               description="Add a new commercial to the archive"

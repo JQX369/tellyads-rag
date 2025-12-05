@@ -18,13 +18,18 @@ export async function GET(request: NextRequest) {
       SELECT
         COUNT(*) as total_ads,
         COUNT(DISTINCT brand_name) as total_brands,
-        COUNT(*) FILTER (WHERE embedding IS NOT NULL) as ads_with_embeddings,
         COUNT(*) FILTER (WHERE year IS NOT NULL) as ads_with_year,
         MIN(year) as earliest_year,
         MAX(year) as latest_year,
-        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as recent_count,
-        COUNT(*) FILTER (WHERE processing_status IN ('pending', 'processing')) as processing_count
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as recent_count
       FROM ads
+    `);
+
+    // Get embedding counts from embedding_items table
+    const embeddingCounts = await queryOne(`
+      SELECT COUNT(DISTINCT ad_id) as ads_with_embeddings
+      FROM embedding_items
+      WHERE ad_id IS NOT NULL
     `);
 
     // Get editorial counts
@@ -62,12 +67,11 @@ export async function GET(request: NextRequest) {
     const stats = {
       total_ads: parseInt(counts?.total_ads ?? '0', 10),
       total_brands: parseInt(counts?.total_brands ?? '0', 10),
-      ads_with_embeddings: parseInt(counts?.ads_with_embeddings ?? '0', 10),
+      ads_with_embeddings: parseInt(embeddingCounts?.ads_with_embeddings ?? '0', 10),
       ads_with_year: parseInt(counts?.ads_with_year ?? '0', 10),
       earliest_year: counts?.earliest_year ?? null,
       latest_year: counts?.latest_year ?? null,
       recent_count: parseInt(counts?.recent_count ?? '0', 10),
-      processing_count: parseInt(counts?.processing_count ?? '0', 10),
       total_editorial: parseInt(editorialCounts?.total_editorial ?? '0', 10),
       published_editorial: parseInt(editorialCounts?.published_editorial ?? '0', 10),
       categories: categories.map((row) => ({
