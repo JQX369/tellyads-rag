@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { queryOne, PUBLISH_GATE_CONDITION } from '@/lib/db';
+import { queryOne, queryAll, PUBLISH_GATE_CONDITION } from '@/lib/db';
 
 interface PageProps {
   params: Promise<{ brand: string; slug: string }>;
@@ -118,6 +118,51 @@ async function getAd(brand: string, slug: string): Promise<AdData | null> {
   }
 }
 
+interface BrandAd {
+  external_id: string;
+  brand_slug: string;
+  slug: string;
+  headline?: string;
+  product_name?: string;
+  year?: number;
+}
+
+async function getAdsByBrand(brandName: string, excludeId: string): Promise<BrandAd[]> {
+  try {
+    const rows = await queryAll(
+      `
+      SELECT
+        a.external_id,
+        a.product_name,
+        a.year,
+        e.brand_slug,
+        e.slug,
+        e.headline
+      FROM ad_editorial e
+      JOIN ads a ON a.id = e.ad_id
+      WHERE a.brand_name = $1
+        AND a.id != $2
+        AND ${PUBLISH_GATE_CONDITION}
+      ORDER BY a.year DESC NULLS LAST
+      LIMIT 6
+      `,
+      [brandName, excludeId]
+    );
+
+    return rows.map(row => ({
+      external_id: row.external_id,
+      brand_slug: row.brand_slug,
+      slug: row.slug,
+      headline: row.headline,
+      product_name: row.product_name,
+      year: row.year,
+    }));
+  } catch (error) {
+    console.error('Error fetching brand ads:', error);
+    return [];
+  }
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { brand, slug } = await params;
   const ad = await getAd(brand, slug);
@@ -167,6 +212,9 @@ export default async function AdvertPage({ params }: PageProps) {
     notFound();
   }
 
+  // Fetch other ads from the same brand
+  const brandAds = await getAdsByBrand(ad.brand_name, ad.id);
+
   const title = ad.headline || ad.one_line_summary || 'Untitled Ad';
   const description = ad.summary || ad.extracted_summary || '';
 
@@ -180,22 +228,22 @@ export default async function AdvertPage({ params }: PageProps) {
               Home
             </Link>
           </li>
-          <li>/</li>
+          <li className="text-red-500/40">/</li>
           <li>
-            <Link href="/search" className="hover:text-white transition-colors">
+            <Link href="/search" className="hover:text-red-400 transition-colors">
               Ads
             </Link>
           </li>
-          <li>/</li>
+          <li className="text-red-500/40">/</li>
           <li>
             <Link
               href={`/search?brand=${encodeURIComponent(ad.brand_name)}`}
-              className="hover:text-white transition-colors"
+              className="hover:text-red-400 transition-colors"
             >
               {ad.brand_name}
             </Link>
           </li>
-          <li>/</li>
+          <li className="text-red-500/40">/</li>
           <li className="text-white truncate max-w-[200px]">{title}</li>
         </ol>
       </nav>
@@ -250,7 +298,7 @@ export default async function AdvertPage({ params }: PageProps) {
                   <Link
                     key={tag}
                     href={`/search?tag=${encodeURIComponent(tag)}`}
-                    className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-700 rounded-full transition-colors"
+                    className="px-3 py-1 text-sm bg-gray-800 hover:bg-red-900/30 hover:text-red-300 rounded-full transition-colors"
                   >
                     {tag}
                   </Link>
@@ -258,31 +306,13 @@ export default async function AdvertPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* Impact Scores */}
-            {ad.impact_scores && (
-              <div className="bg-gray-900/50 rounded-xl p-6 border border-white/10 mb-8">
-                <h3 className="text-lg font-semibold mb-4">Impact Analysis</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Object.entries(ad.impact_scores).map(([key, value]) => (
-                    <div key={key} className="text-center">
-                      <div className="text-2xl font-bold text-green-400">
-                        {typeof value === 'number' ? value.toFixed(0) : String(value ?? '')}
-                      </div>
-                      <div className="text-xs text-gray-500 capitalize">
-                        {key.replace(/_/g, ' ')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Sidebar */}
           <div className="lg:col-span-1">
             {/* Feedback Panel (Client Component would go here) */}
-            <div className="bg-gray-900/50 rounded-xl p-6 border border-white/10 mb-6">
-              <h3 className="text-lg font-semibold mb-4">Community Feedback</h3>
+            <div className="bg-gray-900/50 rounded-xl p-6 border border-red-500/10 mb-6">
+              <h3 className="text-lg font-semibold mb-4 text-red-50">Community Feedback</h3>
 
               {/* Static display - real interaction needs client component */}
               <div className="space-y-4">
@@ -299,20 +329,6 @@ export default async function AdvertPage({ params }: PageProps) {
                   <span className="font-medium">{ad.save_count || 0}</span>
                 </div>
 
-                {/* Scores */}
-                <div className="pt-4 border-t border-white/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gray-400">Score</span>
-                    <span className="text-lg font-bold text-green-400">
-                      {ad.final_score?.toFixed(1) || ad.ai_score?.toFixed(1) || '—'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    AI: {ad.ai_score?.toFixed(0) || 50} |
-                    User: {ad.user_score?.toFixed(0) || 0} |
-                    Weight: {((ad.confidence_weight || 0) * 100).toFixed(0)}%
-                  </div>
-                </div>
 
                 {/* Reason counts (only if threshold met) */}
                 {ad.reason_threshold_met && ad.reason_counts && Object.keys(ad.reason_counts).length > 0 && (
@@ -339,13 +355,9 @@ export default async function AdvertPage({ params }: PageProps) {
             </div>
 
             {/* Ad Info */}
-            <div className="bg-gray-900/50 rounded-xl p-6 border border-white/10">
-              <h3 className="text-lg font-semibold mb-4">Details</h3>
+            <div className="bg-gray-900/50 rounded-xl p-6 border border-red-500/10">
+              <h3 className="text-lg font-semibold mb-4 text-red-50">Details</h3>
               <dl className="space-y-3 text-sm">
-                <div>
-                  <dt className="text-gray-500">External ID</dt>
-                  <dd className="font-mono">{ad.external_id}</dd>
-                </div>
                 {ad.format_type && (
                   <div>
                     <dt className="text-gray-500">Format</dt>
@@ -362,6 +374,34 @@ export default async function AdvertPage({ params }: PageProps) {
             </div>
           </div>
         </div>
+
+        {/* More from Brand */}
+        {brandAds.length > 0 && (
+          <div className="mt-16 pt-8 border-t border-red-500/20">
+            <h2 className="text-2xl font-bold mb-6">More from <span className="text-red-400">{ad.brand_name}</span></h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {brandAds.map((brandAd) => (
+                <Link
+                  key={brandAd.external_id}
+                  href={`/advert/${brandAd.brand_slug}/${brandAd.slug}`}
+                  className="group block bg-gray-900/50 rounded-lg border border-white/10 overflow-hidden hover:border-red-500/40 transition-colors"
+                >
+                  <div className="aspect-video bg-gray-800 flex items-center justify-center group-hover:bg-red-950/20 transition-colors">
+                    <span className="text-3xl opacity-50">📺</span>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-sm font-medium text-white group-hover:text-red-300 line-clamp-2 transition-colors">
+                      {brandAd.headline || brandAd.product_name || 'Untitled'}
+                    </p>
+                    {brandAd.year && (
+                      <p className="text-xs text-gray-500 mt-1">{brandAd.year}</p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
