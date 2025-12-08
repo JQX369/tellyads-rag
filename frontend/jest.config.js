@@ -1,9 +1,7 @@
 /** @type {import('jest').Config} */
-const config = {
+const baseConfig = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/lib'],
-  testMatch: ['**/__tests__/**/*.test.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
@@ -12,10 +10,31 @@ const config = {
       tsconfig: 'tsconfig.json',
     }],
   },
+};
+
+const config = {
+  // Separate test suites
+  projects: [
+    {
+      ...baseConfig,
+      displayName: 'unit',
+      testMatch: ['<rootDir>/lib/__tests__/**/*.test.ts'],
+    },
+    {
+      ...baseConfig,
+      displayName: 'analytics',
+      testMatch: ['<rootDir>/tests/analytics/**/*.test.ts'],
+      setupFilesAfterEnv: ['<rootDir>/tests/analytics/setup.ts'],
+    },
+  ],
   collectCoverageFrom: [
     'lib/**/*.ts',
+    'app/api/**/*.ts',
     '!lib/**/__tests__/**',
+    '!**/tests/**',
   ],
+  // Default timeout for tests
+  testTimeout: 10000,
 };
 
 module.exports = config;

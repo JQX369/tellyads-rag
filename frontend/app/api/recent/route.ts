@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
       ads: formattedResults,  // Alias for Browse page compatibility
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
     });
   } catch (error) {

@@ -24,7 +24,7 @@ interface Ad {
   canonical_url?: string;
 }
 
-const decades = ["1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
+const decades = ["1980s", "1990s", "2000s", "2010s", "2020s"];
 
 const categories = [
   { id: "automotive", name: "Automotive" },

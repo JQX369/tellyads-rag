@@ -2,12 +2,18 @@
 
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-        <div className="text-slate-500 animate-pulse">Loading commercials...</div>
+    <div className="min-h-screen bg-void flex items-center justify-center">
+      <div className="flex flex-col items-center gap-6">
+        {/* Starburst spinner */}
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+          <div className="absolute inset-0 rounded-full border-2 border-transmission border-t-transparent animate-spin" />
+          <div className="absolute inset-2 rounded-full border border-transmission/30 border-t-transparent animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
+        </div>
+        <span className="font-mono text-sm uppercase tracking-ultra-wide text-antenna animate-pulse">
+          Loading...
+        </span>
       </div>
     </div>
   );
 }
-

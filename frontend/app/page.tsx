@@ -5,6 +5,9 @@ import { Hero, DecadeNav, CategoryShowcase, FeaturedAds } from "@/components/sec
 // Import db directly for server-side data fetching (no HTTP round-trip)
 import { queryAll, queryOne, PUBLISH_GATE_CONDITION } from "@/lib/db";
 
+// Revalidate every 5 minutes for fresh content but fast loads
+export const revalidate = 300;
+
 // Fetch featured ads server-side (direct DB query)
 async function getFeaturedAds() {
   try {

@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:analytics": "jest --selectProjects analytics",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit"
   },

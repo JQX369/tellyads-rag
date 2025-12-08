@@ -8,8 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne, queryAll } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 import { verifyAdmin } from '@/lib/admin-auth';
+import { getCaptureMetrics } from '@/lib/analytics-metrics';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +36,12 @@ interface OverviewMetrics {
   avg_search_rate: number | null;
   avg_view_rate: number | null;
   avg_engagement_rate: number | null;
+
+  // Observability (capture endpoint health)
+  capture_error_count: number;
+  capture_error_rate_pct: number;
+  capture_events_24h: number;
+  capture_last_error: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -53,8 +60,11 @@ export async function GET(request: NextRequest) {
       ) as exists`
     );
 
+    // Get capture metrics (always available, in-memory)
+    const captureMetrics = getCaptureMetrics();
+
     if (!tableExists?.exists) {
-      // Return zeros if tables don't exist yet
+      // Return zeros if tables don't exist yet (but include capture metrics)
       return NextResponse.json({
         events_today: 0,
         sessions_today: 0,
@@ -70,6 +80,10 @@ export async function GET(request: NextRequest) {
         avg_search_rate: null,
         avg_view_rate: null,
         avg_engagement_rate: null,
+        capture_error_count: captureMetrics.error_count,
+        capture_error_rate_pct: captureMetrics.error_rate_pct,
+        capture_events_24h: captureMetrics.events_24h,
+        capture_last_error: captureMetrics.last_error || null,
       });
     }
 
@@ -188,6 +202,11 @@ export async function GET(request: NextRequest) {
       ...metrics7d,
       ...trends,
       ...funnel,
+      // Observability metrics
+      capture_error_count: captureMetrics.error_count,
+      capture_error_rate_pct: captureMetrics.error_rate_pct,
+      capture_events_24h: captureMetrics.events_24h,
+      capture_last_error: captureMetrics.last_error || null,
     };
 
     return NextResponse.json(response);

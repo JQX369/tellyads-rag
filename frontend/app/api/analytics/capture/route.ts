@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { trackCaptureError, trackEventIngested, getCaptureMetrics } from '@/lib/analytics-metrics';
 
 export const runtime = 'nodejs';
 
@@ -69,48 +70,6 @@ const VALID_EVENTS = new Set([
   'seo.404',
   'seo.legacy_redirect',
 ]);
-
-// ============================================================================
-// Error Tracking (aggregate, no PII)
-// ============================================================================
-
-interface ErrorMetrics {
-  count: number;
-  lastError: string;
-  lastAt: number;
-}
-
-const errorMetrics: ErrorMetrics = {
-  count: 0,
-  lastError: '',
-  lastAt: 0,
-};
-
-// Track events ingested (24h window)
-let eventsIngested24h = 0;
-let lastEventCountReset = Date.now();
-const EVENT_COUNT_RESET_INTERVAL = 86400000; // 24 hours
-
-function trackCaptureError(error: string): void {
-  errorMetrics.count++;
-  errorMetrics.lastError = error.slice(0, 200);
-  errorMetrics.lastAt = Date.now();
-}
-
-function trackEventIngested(): void {
-  const now = Date.now();
-  if (now - lastEventCountReset > EVENT_COUNT_RESET_INTERVAL) {
-    eventsIngested24h = 0;
-    errorMetrics.count = 0;
-    lastEventCountReset = now;
-  }
-  eventsIngested24h++;
-}
-
-// Export for admin API to read
-export function getCaptureMetrics(): ErrorMetrics & { events_24h: number } {
-  return { ...errorMetrics, events_24h: eventsIngested24h };
-}
 
 // ============================================================================
 // Rate Limiting
@@ -321,7 +280,8 @@ export async function POST(request: NextRequest) {
 
     // Log aggregate error info (not PII)
     if (process.env.NODE_ENV !== 'development') {
-      console.error(`[Analytics] Capture error #${errorMetrics.count}: ${errorMessage.slice(0, 100)}`);
+      const metrics = getCaptureMetrics();
+      console.error(`[Analytics] Capture error #${metrics.error_count}: ${errorMessage.slice(0, 100)}`);
     }
 
     // Silent failure - analytics should never break UX
