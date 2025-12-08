@@ -35,6 +35,8 @@ const config = {
   ],
   // Default timeout for tests
   testTimeout: 10000,
+  // Force exit to handle open handles from rate limiting tests
+  forceExit: true,
 };
 
 module.exports = config;
