@@ -70,6 +70,7 @@ from .pipeline.stages import (
     EmbeddingsStage,
 )
 from . import db_backend
+from .catalog_processor import CatalogImportProcessor
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -234,12 +235,109 @@ def _stop_heartbeat(job_id: uuid.UUID):
 
 
 # ---------------------------------------------------------------------------
+# Catalog Import Processing
+# ---------------------------------------------------------------------------
+
+def process_catalog_import_job(job: Job, queue: JobQueue) -> bool:
+    """
+    Process a catalog_import job.
+
+    Args:
+        job: Job with job_type='catalog_import'
+        queue: Queue instance for status updates
+
+    Returns:
+        True if job succeeded, False otherwise
+    """
+    import_id = job.raw_input.get("import_id")
+    file_path = job.raw_input.get("file_path")
+    bucket = job.raw_input.get("bucket")
+    original_filename = job.raw_input.get("original_filename")
+
+    # Track active job
+    with _state.active_jobs_lock:
+        _state.active_jobs.add(job.id)
+    _state.current_job_id = job.id
+    start_time = time.time()
+
+    logger.info(
+        f"Processing catalog import job {job.id}: "
+        f"import_id={import_id}, file={original_filename}"
+    )
+
+    # Start heartbeat thread
+    _start_heartbeat(job.id, queue)
+
+    try:
+        # Create heartbeat callback for processor
+        def heartbeat_callback(stage: str, progress: float):
+            queue.heartbeat(job.id, stage=stage, progress=progress)
+
+        # Initialize processor
+        processor = CatalogImportProcessor(
+            import_id=import_id,
+            heartbeat_callback=heartbeat_callback,
+        )
+
+        # Run the import
+        result = processor.process(
+            file_path=file_path,
+            bucket=bucket,
+        )
+
+        elapsed = time.time() - start_time
+
+        if result["success"]:
+            output = JobOutput(
+                elapsed_seconds=elapsed,
+                stage_reached="completed",
+            )
+            # Add result data to output dict
+            output_dict = output.to_dict()
+            output_dict["rows_total"] = result.get("rows_total", 0)
+            output_dict["rows_ok"] = result.get("rows_ok", 0)
+            output_dict["rows_failed"] = result.get("rows_failed", 0)
+
+            queue.complete(job.id, output)
+            logger.info(
+                f"Catalog import job {job.id} succeeded in {elapsed:.1f}s: "
+                f"{result.get('rows_ok', 0)}/{result.get('rows_total', 0)} rows"
+            )
+            _state.jobs_succeeded += 1
+            return True
+        else:
+            error_msg = result.get("error", "Catalog import failed")
+            queue.fail(job.id, error_msg, error_code="CATALOG_IMPORT", permanent=True)
+            logger.error(f"Catalog import job {job.id} failed: {error_msg}")
+            _state.jobs_failed += 1
+            return False
+
+    except Exception as e:
+        logger.exception(f"Catalog import job {job.id} unexpected error: {e}")
+        sentry_sdk.capture_exception(e)
+        queue.fail(job.id, str(e), error_code="UNEXPECTED", permanent=False)
+        _state.jobs_failed += 1
+        return False
+
+    finally:
+        # Stop heartbeat thread
+        _stop_heartbeat(job.id)
+        # Remove from active jobs
+        with _state.active_jobs_lock:
+            _state.active_jobs.discard(job.id)
+        _state.current_job_id = None
+        _state.jobs_processed += 1
+
+
+# ---------------------------------------------------------------------------
 # Job Processing
 # ---------------------------------------------------------------------------
 
 def process_job(job: Job, pipeline: AdProcessingPipeline, queue: JobQueue) -> bool:
     """
     Process a single job through the ingestion pipeline.
+
+    Routes to specialized processors based on job_type.
 
     Args:
         job: Job to process
@@ -249,6 +347,14 @@ def process_job(job: Job, pipeline: AdProcessingPipeline, queue: JobQueue) -> bo
     Returns:
         True if job succeeded, False otherwise
     """
+    # Check for specialized job types first
+    job_type = job.raw_input.get("job_type")
+
+    if job_type == "catalog_import":
+        # Route to catalog import processor
+        return process_catalog_import_job(job, queue)
+
+    # Default: ad ingestion job
     # Track active job
     with _state.active_jobs_lock:
         _state.active_jobs.add(job.id)
