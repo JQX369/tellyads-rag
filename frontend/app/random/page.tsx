@@ -32,8 +32,12 @@ export default async function RandomPage() {
   }
 }
 
-// Generate metadata
+// Generate metadata - noindex since this is a redirect-only page
 export const metadata = {
   title: "Random Ad | TellyAds",
   description: "Discover a random commercial from the TellyAds archive",
+  robots: {
+    index: false,
+    follow: true,
+  },
 };

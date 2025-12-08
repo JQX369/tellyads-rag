@@ -44,6 +44,9 @@ function getAdminKeys(): string[] | null {
 /**
  * Verify admin API key from request header.
  *
+ * SECURITY: Always denies access when ADMIN_API_KEY is not configured.
+ * This is intentional - admin endpoints must never be open by default.
+ *
  * @param headerValue - Value of X-Admin-Key header
  * @returns Object with verified status and error message if any
  */
@@ -53,12 +56,15 @@ export function verifyAdminKey(headerValue: string | null): {
 } {
   const adminKeys = getAdminKeys();
 
-  // Not configured
+  // SECURITY: Not configured = deny access (never default-open)
   if (!adminKeys || adminKeys.length === 0) {
-    console.warn('Admin authentication not configured. Set ADMIN_API_KEY or ADMIN_API_KEYS env var.');
+    console.error(
+      'SECURITY: Admin endpoint accessed but ADMIN_API_KEY not configured. ' +
+      'Set ADMIN_API_KEY or ADMIN_API_KEYS env var to enable admin access.'
+    );
     return {
       verified: false,
-      error: 'Admin authentication not configured',
+      error: 'Admin access not configured',
     };
   }
 

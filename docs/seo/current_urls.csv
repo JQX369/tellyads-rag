@@ -1,0 +1,45 @@
+url,type,pattern,notes
+# Top-Level Pages
+https://www.tellyads.com/,page,homepage,Main landing page
+https://www.tellyads.com/browse,page,browse,"Browse/archive page"
+https://www.tellyads.com/latestads,page,latest,"Latest ads listing - redirects to /latest"
+https://www.tellyads.com/searchall,page,search,"Search page - redirects to /search"
+https://www.tellyads.com/telly-ads,page,about,"About/info page - redirects to /"
+https://www.tellyads.com/adsbydecade,page,decade,"Decade browser - redirects to /browse"
+https://www.tellyads.com/top30ads,page,top30,"Top 30 ads - redirects to /browse"
+https://www.tellyads.com/submit-a-ad,page,submit,"Submit ad form - redirects to /about"
+https://www.tellyads.com/copy-of-home,page,draft,"Draft page - redirects to /"
+https://www.tellyads.com/category/all-products,page,category,"Store category - redirects to /browse"
+
+# Ad Detail Pages - Pattern: /advert/{brand}/{slug}[-n]
+# Approximately 3000+ URLs across 3 sitemaps
+# Examples:
+https://www.tellyads.com/advert/tesco/autumn-%26-winter-collection-n,advert,/advert/{brand}/{slug}-n,"Brand ad page with -n suffix"
+https://www.tellyads.com/advert/john-lewis/christmas-2021---unexpected-guest-n,advert,/advert/{brand}/{slug}-n,"Brand ad page with -n suffix"
+https://www.tellyads.com/advert/universal/ted,advert,/advert/{brand}/{slug},"Brand ad page without -n suffix"
+https://www.tellyads.com/advert/h&m/a-magical-christmas-n,advert,/advert/{brand}/{slug}-n,"URL-encoded characters in brand"
+https://www.tellyads.com/advert/mcvitie's/the-new-boss-n,advert,/advert/{brand}/{slug}-n,"Apostrophe in brand name"
+
+# Items Pages - Pattern: /items/{slug}
+# Approximately 3000+ URLs across 3 sitemaps
+# These are the SAME ads but accessed via slug only (no brand in URL)
+https://www.tellyads.com/items/getting-the-drinks-in,items,/items/{slug},"Item page - needs DB lookup for brand"
+https://www.tellyads.com/items/christmas-2020,items,/items/{slug},"Item page - common slug"
+https://www.tellyads.com/items/what's-for-dinner%3F,items,/items/{slug},"URL-encoded characters"
+https://www.tellyads.com/items/yes-sir-dinosaur!,items,/items/{slug},"Special characters in slug"
+
+# Sitemap Files
+https://www.tellyads.com/sitemap.xml,sitemap,index,"Sitemap index"
+https://www.tellyads.com/dynamic-advert-sitemap.xml,sitemap,advert,"Ad pages sitemap 1"
+https://www.tellyads.com/dynamic-advert___1-sitemap.xml,sitemap,advert,"Ad pages sitemap 2"
+https://www.tellyads.com/dynamic-advert___2-sitemap.xml,sitemap,advert,"Ad pages sitemap 3"
+https://www.tellyads.com/dynamic-items-sitemap.xml,sitemap,items,"Items sitemap 1"
+https://www.tellyads.com/dynamic-items___1-sitemap.xml,sitemap,items,"Items sitemap 2"
+https://www.tellyads.com/dynamic-items___2-sitemap.xml,sitemap,items,"Items sitemap 3"
+https://www.tellyads.com/pages-sitemap.xml,sitemap,pages,"Static pages sitemap"
+https://www.tellyads.com/store-categories-sitemap.xml,sitemap,store,"Store categories sitemap"
+
+# Summary Statistics (estimated from sitemap index)
+# Total /advert/* URLs: ~3000
+# Total /items/* URLs: ~3000
+# Duplicate content: /items/X and /advert/{brand}/X-n often point to same ad

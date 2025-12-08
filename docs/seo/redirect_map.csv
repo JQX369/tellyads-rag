@@ -1,0 +1,34 @@
+from,to,code,reason
+# Top-Level Page Redirects
+/latestads,/latest,301,Page renamed
+/searchall,/search,301,Page renamed
+/telly-ads,/,301,Content merged to homepage
+/adsbydecade,/browse,301,Content integrated into browse
+/top30ads,/browse,301,Content integrated into browse
+/submit-a-ad,/about,301,Consolidated to about page
+/copy-of-home,/,301,Draft page cleanup
+/category/all-products,/browse,301,Store category to browse
+
+# Legacy Wix Post URLs (if any exist)
+/post/*,/api/legacy-redirect?path=/post/*,301,Legacy URL lookup via API
+
+# Ad Detail Pattern Redirects
+# Pattern: /advert/{brand}/{slug}-n -> /advert/{brand}/{slug}
+# Handled by middleware: strips -n suffix and normalizes brand/slug
+
+# Items Pattern Redirects
+# Pattern: /items/{slug} -> /advert/{brand_slug}/{slug}
+# Handled by middleware: requires DB lookup to find brand
+
+# Internal Duplicate Resolution
+# /ads/{external_id} -> /advert/{brand_slug}/{slug}
+# Handled by middleware: requires DB lookup for canonical URL
+
+# Query Parameter Cleanup
+# ?lightbox=* parameters should be stripped (Wix artifact)
+
+# WWW Canonicalization
+# www.tellyads.com -> tellyads.com (handled by DNS/Vercel)
+
+# HTTP -> HTTPS
+# http:// -> https:// (handled by Vercel)

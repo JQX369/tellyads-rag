@@ -6,18 +6,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { queryAll, queryOne } from '@/lib/db';
+import { verifyAdminKey } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 
-function isAuthorized(request: NextRequest): boolean {
-  const adminKey = request.headers.get('x-admin-key');
-  const expectedKey = process.env.ADMIN_API_KEY;
-  return expectedKey ? adminKey === expectedKey : true;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const adminKey = request.headers.get('x-admin-key');
+  const auth = verifyAdminKey(adminKey);
+  if (!auth.verified) {
+    return NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);

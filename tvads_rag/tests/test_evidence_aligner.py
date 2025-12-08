@@ -331,7 +331,7 @@ class TestMigrationFileIntegrity:
     def migration_content(self):
         """Read the migration file content."""
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        migration_path = os.path.join(base_dir, "schema_claims_supers_evidence.sql")
+        migration_path = os.path.join(base_dir, "migrations", "archived", "schema_claims_supers_evidence.sql")
 
         with open(migration_path, "r") as f:
             return f.read().lower()

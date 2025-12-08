@@ -86,9 +86,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limiting
+    // Rate limiting (async for distributed Redis)
     const rateLimitKey = getRateLimitKey(request, session_id);
-    const rateLimitResult = checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIG);
+    const rateLimitResult = await checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIG);
 
     if (!rateLimitResult.success) {
       const retryAfterSeconds = Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000);
@@ -152,7 +152,8 @@ export async function POST(request: NextRequest) {
       ? `AND ${conditions.join(' AND ')}`
       : '';
 
-    // Semantic search with pgvector
+    // Semantic search with pgvector via embedding_items table
+    // Uses ad_summary embeddings as the canonical ad-level embedding
     const results = await queryAll(
       `
       SELECT
@@ -174,12 +175,13 @@ export async function POST(request: NextRequest) {
         e.headline,
         e.curated_tags,
         e.is_featured,
-        1 - (a.embedding <=> $1::vector) as similarity
-      FROM ads a
+        1 - (ei.embedding <=> $1::vector) as similarity
+      FROM embedding_items ei
+      JOIN ads a ON a.id = ei.ad_id
       LEFT JOIN ad_editorial e ON e.ad_id = a.id AND ${PUBLISH_GATE_CONDITION}
-      WHERE a.embedding IS NOT NULL
+      WHERE ei.item_type = 'ad_summary'
         ${whereClause}
-      ORDER BY a.embedding <=> $1::vector
+      ORDER BY ei.embedding <=> $1::vector
       LIMIT $${paramIndex}
       `,
       params

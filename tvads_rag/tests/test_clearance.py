@@ -159,7 +159,7 @@ class TestMigrationFile:
         import os
         migration_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "schema_clearance.sql"
+            "migrations", "archived", "schema_clearance.sql"
         )
         assert os.path.exists(migration_path)
 
@@ -168,7 +168,7 @@ class TestMigrationFile:
         import os
         migration_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "schema_clearance.sql"
+            "migrations", "archived", "schema_clearance.sql"
         )
         with open(migration_path) as f:
             content = f.read()
@@ -181,7 +181,7 @@ class TestMigrationFile:
         import os
         migration_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "schema_clearance.sql"
+            "migrations", "archived", "schema_clearance.sql"
         )
         with open(migration_path) as f:
             content = f.read()
@@ -193,7 +193,7 @@ class TestMigrationFile:
         import os
         migration_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "schema_clearance.sql"
+            "migrations", "archived", "schema_clearance.sql"
         )
         with open(migration_path) as f:
             content = f.read()

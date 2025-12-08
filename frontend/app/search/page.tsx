@@ -18,7 +18,20 @@ export async function generateMetadata({
   searchParams,
 }: SearchPageProps): Promise<Metadata> {
   const params = await searchParams;
-  const query = params.q || "All Ads";
+  const query = params.q;
+
+  // Base search page (no query) should be indexed with canonical
+  // Search results (with query) should NOT be indexed (duplicative content)
+  if (!query) {
+    return constructMetadata({
+      title: "Search TV Commercials",
+      description: "Search the TellyAds archive of thousands of TV commercials by concept, emotion, visual content, or brand.",
+      path: "/search",
+      noIndex: false,
+    });
+  }
+
+  // Search results pages - noindex but still follow links
   return constructMetadata({
     title: `Search: "${query}"`,
     description: `Search results for "${query}" in the TellyAds archive.`,

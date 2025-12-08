@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { defaultMetadata } from "@/lib/seo";
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
+import { OrganizationJsonLd, WebSiteJsonLd } from "@/components/JsonLd";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -33,6 +34,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* Site-wide JSON-LD Structured Data */}
+        <OrganizationJsonLd />
+        <WebSiteJsonLd />
+      </head>
       <body
         className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} font-display antialiased min-h-screen bg-void text-signal`}
       >

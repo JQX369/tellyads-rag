@@ -9,6 +9,7 @@ export const metadata: Metadata = constructMetadata({
   title: "Latest Ads | TellyAds",
   description:
     "Discover the most recently added TV commercials to the TellyAds archive. Fresh content updated regularly.",
+  path: "/latest",
 });
 
 interface Ad {

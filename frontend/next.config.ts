@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from '@sentry/nextjs';
 
 // Security headers for production hardening
 const securityHeaders = [
@@ -114,4 +115,30 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry configuration options
+const sentryWebpackPluginOptions = {
+  // Organization and project from environment
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+
+  // Only upload source maps in production with auth token
+  silent: !process.env.SENTRY_AUTH_TOKEN,
+
+  // Disable source map upload in CI without auth
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+
+  // Hide source maps from browser
+  hideSourceMaps: true,
+
+  // Automatically instrument API routes
+  autoInstrumentServerFunctions: true,
+  autoInstrumentMiddleware: true,
+};
+
+// Export with Sentry wrapper (only if DSN configured)
+const configWithSentry = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+  : nextConfig;
+
+export default configWithSentry;

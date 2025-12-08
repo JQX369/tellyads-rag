@@ -64,6 +64,23 @@ class ToxicityStage(Stage):
             logger.debug("[%s] Toxicity scoring disabled", ctx.external_id)
             return ctx
 
+        # Check AI availability and log clearly if degraded
+        use_ai = is_toxicity_ai_enabled(toxicity_cfg)
+        if not use_ai and toxicity_cfg.ai_enabled:
+            # AI was requested but not available (missing credentials)
+            logger.warning(
+                "[%s] Toxicity AI unavailable (GOOGLE_API_KEY not set). "
+                "Using regex-only dark pattern detection - results may be less accurate.",
+                ctx.external_id
+            )
+            ctx.add_processing_note("toxicity_ai_unavailable", {
+                "type": "warning",
+                "reason": "GOOGLE_API_KEY not set, falling back to regex-only detection",
+                "ai_requested": True,
+                "ai_available": False,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            })
+
         # Check for missing prerequisites and emit warnings
         missing_prereqs = []
         if not ctx.physics_result:
@@ -84,14 +101,13 @@ class ToxicityStage(Stage):
                 )
             # Still continue - toxicity can run with partial data
 
-        logger.debug("[%s] Running toxicity analysis...", ctx.external_id)
+        logger.debug("[%s] Running toxicity analysis (ai=%s)...", ctx.external_id, use_ai)
 
         try:
             # Build analysis_data dict for the scorer
             analysis_data = self._build_analysis_data(ctx)
-            
+
             # Run toxicity scoring
-            use_ai = is_toxicity_ai_enabled(toxicity_cfg)
             scorer = ToxicityScorer(analysis_data, use_ai=use_ai)
             toxicity_report = scorer.calculate_toxicity()
             
@@ -119,29 +135,46 @@ class ToxicityStage(Stage):
                 )
             
         except Exception as e:
+            import traceback
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_exception(e)
+            except ImportError:
+                pass  # Sentry not available
+
             error_str = str(e).lower()
-            
+            error_type = type(e).__name__
+
             # Check for transient errors (API rate limits, etc.)
             transient_indicators = [
                 "timeout", "rate limit", "429", "503", "502",
                 "connection", "temporarily",
             ]
             is_transient = any(ind in error_str for ind in transient_indicators)
-            
+
             if is_transient:
                 raise TransientError(
                     f"Toxicity scoring error: {e}",
                     self.name,
                     cause=e,
                 )
-            
-            logger.warning(
-                "[%s] Toxicity scoring failed: %s",
-                ctx.external_id, str(e)[:100]
+
+            # Log detailed error information
+            logger.error(
+                "[%s] Toxicity scoring failed: [%s] %s\n%s",
+                ctx.external_id,
+                error_type,
+                str(e)[:200],
+                traceback.format_exc()
             )
+
             ctx.add_processing_note("toxicity_error", {
                 "type": "error",
+                "error_type": error_type,
                 "reason": str(e)[:500],
+                "ai_enabled": use_ai,
+                "had_physics": ctx.physics_result is not None,
+                "had_transcript": ctx.transcript is not None,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             })
         
@@ -243,6 +276,7 @@ class ToxicityStage(Stage):
                 "analysis_result is required (run LLMAnalysisStage first)",
                 self.name
             )
+
 
 
 

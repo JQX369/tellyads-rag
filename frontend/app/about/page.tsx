@@ -7,6 +7,7 @@ export const metadata: Metadata = constructMetadata({
   title: "About TellyAds | Our Heritage",
   description:
     "Founded in 2006, TellyAds is the UK's largest archive of television commercials. Learn about our heritage and mission to preserve advertising history.",
+  path: "/about",
 });
 
 const timelineEvents = [

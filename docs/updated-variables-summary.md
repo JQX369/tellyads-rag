@@ -190,3 +190,4 @@ ALTER TABLE ads ADD COLUMN IF NOT EXISTS visual_objects jsonb DEFAULT '{}'::json
 
 
 
+

@@ -245,7 +245,13 @@ export default function AdminDashboard() {
           <h2 className="font-mono text-label uppercase tracking-ultra-wide text-antenna mb-6">
             Quick Actions
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <ActionCard
+              title="Analytics"
+              description="Traffic, search & engagement metrics"
+              href="/admin/analytics"
+              icon="📊"
+            />
             <ActionCard
               title="Editorial"
               description="Publish & manage ad visibility"

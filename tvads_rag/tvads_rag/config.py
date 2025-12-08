@@ -98,8 +98,9 @@ class VideoAnalyticsConfig:
 
 @dataclass(frozen=True)
 class ToxicityConfig:
-    """Configuration for AI-enhanced toxicity scoring."""
+    """Configuration for toxicity scoring."""
 
+    enabled: bool  # Master switch for toxicity scoring (default: True)
     ai_enabled: bool  # Whether to use Gemini for dark pattern detection
     model_name: str  # Gemini model to use (defaults to fast tier)
     api_key: Optional[str]  # Google API key (reuses GOOGLE_API_KEY)
@@ -380,17 +381,21 @@ def is_video_analytics_enabled(config: Optional[VideoAnalyticsConfig] = None) ->
 
 @lru_cache(maxsize=1)
 def get_toxicity_config() -> ToxicityConfig:
-    """Return configuration for AI-enhanced toxicity scoring."""
+    """Return configuration for toxicity scoring."""
+    # Master switch for toxicity scoring (default: enabled)
+    enabled_str = (_get_env("TOXICITY_ENABLED") or "true").lower()
+    enabled = enabled_str in ("true", "1", "yes", "on")
+
     # Check if AI-enhanced toxicity scoring is enabled
     ai_enabled_str = (_get_env("TOXICITY_AI_ENABLED") or "true").lower()
     ai_enabled = ai_enabled_str in ("true", "1", "yes", "on")
-    
+
     # Use Gemini 2.5 Flash (fast tier) for toxicity analysis
     model_name = _get_env("TOXICITY_MODEL") or DEFAULT_VISION_FAST_MODEL
-    
+
     # Reuse GOOGLE_API_KEY
     api_key = _get_env("GOOGLE_API_KEY")
-    
+
     # If AI is enabled but no API key, disable AI and warn
     if ai_enabled and not api_key:
         import logging
@@ -399,8 +404,9 @@ def get_toxicity_config() -> ToxicityConfig:
             "Falling back to regex-only dark pattern detection."
         )
         ai_enabled = False
-    
+
     return ToxicityConfig(
+        enabled=enabled,
         ai_enabled=ai_enabled,
         model_name=model_name,
         api_key=api_key,

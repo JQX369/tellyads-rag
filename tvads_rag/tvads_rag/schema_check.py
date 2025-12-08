@@ -45,8 +45,8 @@ REQUIRED_SUPERS_EVIDENCE_COLUMNS = {
 # Migration files per table
 # =============================================================================
 
-MIGRATION_FILE = "schema_extraction_columns.sql"
-MIGRATION_FILE_CLAIMS_SUPERS = "schema_claims_supers_evidence.sql"
+MIGRATION_FILE = "migrations/archived/schema_extraction_columns.sql"
+MIGRATION_FILE_CLAIMS_SUPERS = "migrations/archived/schema_claims_supers_evidence.sql"
 
 # Per-table migration file mapping
 TABLE_MIGRATIONS: Dict[str, str] = {

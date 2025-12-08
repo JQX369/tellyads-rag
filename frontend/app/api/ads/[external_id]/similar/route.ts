@@ -28,9 +28,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    // Get source ad with embedding
+    // Get source ad and its embedding from embedding_items
     const sourceAd = await queryOne(
-      'SELECT id, embedding FROM ads WHERE external_id = $1',
+      `SELECT a.id, ei.embedding
+       FROM ads a
+       LEFT JOIN embedding_items ei ON ei.ad_id = a.id AND ei.item_type = 'ad_summary'
+       WHERE a.external_id = $1`,
       [external_id]
     );
 
@@ -50,7 +53,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       });
     }
 
-    // Find similar ads by embedding
+    // Find similar ads by embedding using embedding_items table
+    // Uses ad_summary embeddings as the canonical ad-level embedding
     const results = await queryAll(
       `
       SELECT
@@ -70,12 +74,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
         e.headline,
         e.curated_tags,
         e.is_featured,
-        1 - (a.embedding <=> $1::vector) as similarity
-      FROM ads a
+        1 - (ei.embedding <=> $1::vector) as similarity
+      FROM embedding_items ei
+      JOIN ads a ON a.id = ei.ad_id
       LEFT JOIN ad_editorial e ON e.ad_id = a.id AND ${PUBLISH_GATE_CONDITION}
-      WHERE a.id != $2
-        AND a.embedding IS NOT NULL
-      ORDER BY a.embedding <=> $1::vector
+      WHERE ei.item_type = 'ad_summary'
+        AND a.id != $2
+      ORDER BY ei.embedding <=> $1::vector
       LIMIT $3
       `,
       [sourceAd.embedding, sourceAd.id, limit]

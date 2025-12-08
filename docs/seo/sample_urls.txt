@@ -1,0 +1,101 @@
+# TellyAds SEO Migration - Sample URLs for Verification
+# Format: legacy_url -> expected_final_url (or pattern)
+#
+# These URLs are used by verify-migration.py for smoke testing
+# All should resolve in <= 1 redirect hop to a canonical 200 page
+
+# ===========================================
+# Legacy /items/* URLs (Wix store pattern)
+# Require DB lookup via /api/legacy-redirect
+# ===========================================
+/items/christmas-2020
+/items/getting-the-drinks-in
+/items/john-lewis-christmas-ad
+/items/compare-the-meerkat
+/items/guinness-surfer
+/items/cadbury-gorilla
+/items/honda-cog
+/items/nike-write-the-future
+
+# ===========================================
+# Legacy /post/* URLs (Wix blog pattern)
+# Require DB lookup via /api/legacy-redirect
+# ===========================================
+/post/coca-cola-holidays-are-coming
+/post/budweiser-wassup
+/post/old-spice-the-man-your-man
+/post/apple-1984-commercial
+/post/heinz-beanz-meanz
+/post/weetabix-have-you-had-your-weetabix
+
+# ===========================================
+# /advert/* URLs with -n suffix (Wix artifact)
+# Should strip -n suffix and redirect
+# ===========================================
+/advert/john-lewis/christmas-2021-unexpected-guest-n
+/advert/coca-cola/holidays-are-coming-n
+/advert/cadbury/gorilla-n
+/advert/nike/just-do-it-n
+/advert/mcdonalds/reindeer-ready-n
+
+# ===========================================
+# Legacy page renames
+# Static redirects in middleware
+# ===========================================
+/latestads
+/searchall
+/telly-ads
+/adsbydecade
+/top30ads
+/submit-a-ad
+/copy-of-home
+/category/all-products
+/ads
+/adverts
+/archive
+/tv-ads
+/latest-ads
+/search-all
+
+# ===========================================
+# Legacy Wix sitemaps
+# Should 301 to /sitemap.xml
+# ===========================================
+/dynamic-advert-sitemap.xml
+/dynamic-advert___1-sitemap.xml
+/dynamic-advert___2-sitemap.xml
+/dynamic-items-sitemap.xml
+/dynamic-items___1-sitemap.xml
+/dynamic-items___2-sitemap.xml
+/pages-sitemap.xml
+/sitemap_index.xml
+
+# ===========================================
+# Host redirect tests (www -> non-www)
+# These need https://www.tellyads.com prefix when testing
+# ===========================================
+# Test via: https://www.tellyads.com/
+# Test via: https://www.tellyads.com/browse
+# Test via: https://www.tellyads.com/search
+# Test via: https://www.tellyads.com/latest
+# Test via: https://www.tellyads.com/brands
+
+# ===========================================
+# Query parameter cleanup (Wix artifacts)
+# Should strip params and redirect
+# ===========================================
+/browse?lightbox=true
+/search?d=1234
+/advert/nike/just-do-it?wix-vod-video-id=abc123
+
+# ===========================================
+# Canonical pages (should return 200)
+# ===========================================
+/
+/browse
+/search
+/latest
+/brands
+/about
+/sitemap.xml
+/robots.txt

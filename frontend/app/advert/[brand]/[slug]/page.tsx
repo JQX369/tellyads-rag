@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { queryOne, queryAll, PUBLISH_GATE_CONDITION } from '@/lib/db';
+import { AdPageJsonLd } from '@/components/JsonLd';
 
 interface PageProps {
   params: Promise<{ brand: string; slug: string }>;
@@ -219,7 +220,23 @@ export default async function AdvertPage({ params }: PageProps) {
   const description = ad.summary || ad.extracted_summary || '';
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-950 to-black text-white">
+    <>
+      {/* JSON-LD Structured Data for SEO */}
+      <AdPageJsonLd
+        ad={{
+          name: title,
+          description: description || `${ad.brand_name} TV commercial`,
+          brandName: ad.brand_name,
+          brandSlug: ad.brand_slug,
+          slug: ad.slug,
+          thumbnailUrl: ad.thumbnail_url,
+          year: ad.year,
+          duration: ad.duration_seconds,
+          productCategory: ad.product_category,
+        }}
+      />
+
+      <main className="min-h-screen bg-gradient-to-b from-gray-950 to-black text-white">
       {/* Breadcrumb */}
       <nav className="container mx-auto px-4 py-4">
         <ol className="flex items-center gap-2 text-sm text-gray-400">
@@ -404,5 +421,6 @@ export default async function AdvertPage({ params }: PageProps) {
         )}
       </div>
     </main>
+    </>
   );
 }

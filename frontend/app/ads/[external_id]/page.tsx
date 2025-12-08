@@ -55,6 +55,13 @@ async function getSimilarAds(external_id: string): Promise<any[]> {
   }
 }
 
+/**
+ * Generate metadata for /ads/[external_id] pages
+ *
+ * IMPORTANT: These pages are noindexed because /ads/[external_id] is NOT
+ * the canonical URL format. The canonical URL is /advert/[brand]/[slug].
+ * This prevents duplicate content issues in search engines.
+ */
 export async function generateMetadata({ params }: AdPageProps): Promise<Metadata> {
   try {
     const resolvedParams = await params;
@@ -68,9 +75,10 @@ export async function generateMetadata({ params }: AdPageProps): Promise<Metadat
       title,
       description,
       image: ad.image_url,
+      noIndex: true, // Non-canonical URL - canonical is /advert/[brand]/[slug]
     });
   } catch {
-    return constructMetadata({ title: "Ad Not Found" });
+    return constructMetadata({ title: "Ad Not Found", noIndex: true });
   }
 }
 
@@ -323,3 +331,4 @@ function formatCategory(category: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 }
+

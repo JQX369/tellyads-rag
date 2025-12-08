@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://tellyads.com';
+// ALWAYS use non-www canonical host for SEO
+const CANONICAL_HOST = 'https://tellyads.com';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || CANONICAL_HOST;
 
 export const defaultMetadata: Metadata = {
   title: {
@@ -8,11 +10,14 @@ export const defaultMetadata: Metadata = {
     template: '%s | TellyAds'
   },
   description: 'Explore thousands of TV commercials, analyze creative trends, and find inspiration in the world\'s largest database of television advertising.',
-  metadataBase: new URL(BASE_URL),
+  metadataBase: new URL(CANONICAL_HOST),
+  alternates: {
+    canonical: CANONICAL_HOST,
+  },
   openGraph: {
     type: 'website',
     locale: 'en_GB',
-    url: BASE_URL,
+    url: CANONICAL_HOST,
     siteName: 'TellyAds',
     title: 'TellyAds | The World\'s Largest TV Ad Archive',
     description: 'Explore thousands of TV commercials, analyze creative trends, and find inspiration in the world\'s largest database of television advertising.',
@@ -44,23 +49,39 @@ export const defaultMetadata: Metadata = {
   },
 };
 
+/**
+ * Construct page-specific metadata with canonical URL support
+ *
+ * @param path - The path for canonical URL (e.g., '/browse', '/about'). Required for SEO.
+ * @param noIndex - Set to true for pages that shouldn't be indexed (search results, etc.)
+ */
 export function constructMetadata({
   title,
   description,
   image = '/og-image.jpg',
+  path,
   noIndex = false
 }: {
   title?: string;
   description?: string;
   image?: string;
+  path?: string;
   noIndex?: boolean;
 }): Metadata {
+  const canonicalUrl = path ? `${CANONICAL_HOST}${path}` : undefined;
+
   return {
     title,
     description,
+    ...(canonicalUrl && {
+      alternates: {
+        canonical: canonicalUrl,
+      },
+    }),
     openGraph: {
       title,
       description,
+      ...(canonicalUrl && { url: canonicalUrl }),
       images: [
         {
           url: image,
@@ -77,4 +98,11 @@ export function constructMetadata({
       follow: !noIndex,
     },
   };
+}
+
+/**
+ * Get canonical URL for a path
+ */
+export function getCanonicalUrl(path: string): string {
+  return `${CANONICAL_HOST}${path}`;
 }

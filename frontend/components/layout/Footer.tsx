@@ -81,7 +81,7 @@ export function Footer() {
             <nav className="flex flex-col gap-2">
               <FooterLink href="/browse">All Ads</FooterLink>
               <FooterLink href="/brands">Brands</FooterLink>
-              <FooterLink href="/categories">Categories</FooterLink>
+              <FooterLink href="/latest">Latest</FooterLink>
               <FooterLink href="/random">Random</FooterLink>
             </nav>
           </div>
