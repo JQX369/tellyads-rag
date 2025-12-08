@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { queryAll, queryOne } from '@/lib/db';
-import { verifyAdmin } from '@/lib/admin-auth';
+import { verifyAdminKey } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 
@@ -23,7 +23,7 @@ interface DailyDataPoint {
 
 export async function GET(request: NextRequest) {
   // Verify admin auth
-  const authResult = await verifyAdmin(request);
+  const authResult = await verifyAdminKey(request);
   if (!authResult.success) {
     return NextResponse.json({ error: authResult.error }, { status: 401 });
   }

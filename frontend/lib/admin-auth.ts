@@ -96,3 +96,22 @@ export function isAdminConfigured(): boolean {
   const adminKeys = getAdminKeys();
   return adminKeys !== null && adminKeys.length > 0;
 }
+
+/**
+ * Verify admin authentication from a NextRequest.
+ * Wrapper around verifyAdminKey that extracts the header.
+ *
+ * @param request - NextRequest object
+ * @returns Object with success status and error message if any
+ */
+export function verifyAdmin(request: { headers: { get: (name: string) => string | null } }): {
+  success: boolean;
+  error?: string;
+} {
+  const headerValue = request.headers.get('x-admin-key');
+  const result = verifyAdminKey(headerValue);
+  return {
+    success: result.verified,
+    error: result.error,
+  };
+}
