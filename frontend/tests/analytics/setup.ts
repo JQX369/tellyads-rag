@@ -5,8 +5,7 @@
  * This file is run before each test file in the analytics suite.
  */
 
-// Set test environment
-process.env.NODE_ENV = 'test';
+// Set test environment variables (NODE_ENV is already 'test' via Jest)
 process.env.ADMIN_API_KEY = 'test-admin-key-12345';
 process.env.CRON_SECRET = 'test-cron-secret';
 

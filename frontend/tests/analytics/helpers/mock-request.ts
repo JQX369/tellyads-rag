@@ -38,11 +38,10 @@ export function createMockRequest(options: MockRequestOptions = {}): NextRequest
     headersList.set(key, value);
   }
 
-  // Create request init (using type assertion for Next.js compatibility)
-  const init = {
+  // Create request init
+  const init: { method: string; headers: Headers; body?: BodyInit } = {
     method,
     headers: headersList,
-    body: undefined as BodyInit | undefined,
   };
 
   // Add body for non-GET requests
@@ -52,7 +51,7 @@ export function createMockRequest(options: MockRequestOptions = {}): NextRequest
   }
 
   // Create and return NextRequest
-  return new NextRequest(urlObj.toString(), init as RequestInit);
+  return new NextRequest(urlObj.toString(), init);
 }
 
 /**

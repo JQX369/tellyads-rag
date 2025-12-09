@@ -21,11 +21,7 @@ import { randomUUID } from 'crypto';
 export const runtime = 'nodejs';
 
 // Max file size: 50MB (for CSV files, should handle 20k+ rows)
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Note: App Router handles formData() natively, no config needed
 
 // Initialize S3 client
 function getS3Client() {
